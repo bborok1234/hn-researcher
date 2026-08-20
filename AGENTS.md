@@ -12,6 +12,8 @@ python3 -m unittest discover -s tests
 
 python3 knowledge.py --pending      # 재심 대상(안 쓰인 후보) 확인
 python3 knowledge.py --ingest DATE  # 후보를 누적 번들에 반영 (run.sh가 자동으로 부른다)
+python3 sources.py --digest        # HN 외 소스만 확인
+python3 sources.py --releases "$RELEASE_REPOS"   # 릴리스만 확인
 ```
 
 ## 기본과 다른 제약

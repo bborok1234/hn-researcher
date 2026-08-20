@@ -9,7 +9,7 @@
 | 축 | 하는 일 | 담당 |
 |---|---|---|
 | 감지 | 내가 지금 붙어 있는 일을 알아낸다 | `build_profile.py`, `profile.sh` |
-| 선별 | 그에 맞는 양질의 정보를 골라낸다 | `fetch_hn.py`, `prompt-select.md`, `fetch_pages.py` |
+| 선별 | 그에 맞는 양질의 정보를 골라낸다 | `fetch_hn.py`, `sources.py`, `prompt-select.md`, `fetch_pages.py` |
 | 정리 | 읽고 파악하고 바로 쓰게 만든다 | `prompt-write.md`, `to_html.py` |
 | 누적 | 안 쓰인 후보를 버리지 않고 철한다 | `knowledge.py` |
 
@@ -38,8 +38,10 @@
 
 ```
 (경로는 모두 out/ 아래)
-fetch_hn.py ──→ digest-DATE.md        선별용 목록 (제목 + #ID, URL 없음)
-            └─→ urls-DATE.json        {게시물ID: URL}
+sources.py --digest ─→ digest-DATE.md  Lobsters·GeekNews를 **먼저** 쓰고
+fetch_hn.py ──────────→ (같은 파일에 append)  HN을 뒤에 붙인다
+            └─→ urls-DATE.json / urls-extra-DATE.json   {게시물ID: URL}
+sources.py --releases ─→ releases-DATE.md   선별을 건너뛰고 3단계로 직행
 build_profile.py --list ─→ projects-DATE.txt   추적 중인 프로젝트 목록
 1단계 ──────→ candidates-DATE.json    고른 후보 (id/title/source/project/why)
 fetch_pages.py ─→ pages-DATE.md       본문 + 읽기시간 + 원문·댓글 구분
@@ -117,6 +119,20 @@ out/knowledge/
 
 **미독 백로그를 만들지 않는다.** 이것이 `ROADMAP.md`가 "뉴스 아카이브·검색"을 금지한 이유와 공존하는 조건이다. 번들은 기계 쪽에만 있고 `to_html.py`가 렌더하지 않는다. 보류 항목은 오늘 한 장 안에서 오늘 것과 **동등하게 경쟁해서만** 다시 나오고, 12개 상한도 그대로 적용된다. 화면에 미독 목록이 생기는 순간 이 설계는 금지선을 넘는다.
 
+## 소스 셋을 더하며 배운 것
+
+**작은 소스를 목록 맨 앞에 쓴다.** HN 1,148줄 뒤에 Lobsters+GeekNews 59줄을 붙였더니 선별이 **단 한 건도** 집어가지 않았다. 순서를 뒤집자 GeekNews가 후보에 들어왔다. 큐레이션된 소스는 긴 목록의 끝에서 묻힌다. 쿼터(소스별 최소 N건)를 주지 않는다 — 그건 이 프로젝트가 막으려는 패딩이다.
+
+**GeekNews는 경로가 `/rss/`지만 Atom을 준다.** RSS 2.0으로 읽으면 `item`이 없어 조용히 0건이 된다.
+
+**릴리스는 선별을 건너뛴다.** 내가 의존하는 레포 목록을 내가 정하니 관련성이 100%고, 릴리스 노트가 곧 본문이라 수집 단계도 필요 없다. `config.sh`의 `RELEASE_REPOS`가 목록이고, 비우면 이 소스가 꺼진다. 리포트의 `경고`·`적용`을 먹여준다.
+
+**GeekNews·Lobsters는 점수가 없거나 자릿수가 다르다.** GeekNews 피드에는 점수·댓글 수가 아예 없어 `0p/0c`로 온다 — 프롬프트에 "인기도가 없다는 뜻이 아니라 이 소스엔 그 신호가 없다는 뜻"이라고 적어야 0점을 이유로 버리지 않는다. Lobsters는 점수 규모가 HN보다 한 자리 작다.
+
+**`fetch_pages.py`의 댓글 경로는 숫자 ID에만 쓴다.** Algolia items API는 HN만 안다. 안 막으면 HN 외 소스의 `comments` 후보가 전부 404로 죽는다.
+
+**소스별 채택/후보 수를 `log.md`에 남긴다.** 추가한 소스가 실제로 쓰이는지는 며칠 봐야 알고, 기록이 없으면 후보 파일을 다시 파헤쳐야 한다.
+
 ## 리포트 구조가 왜 이런가
 
 **본문은 프로젝트가 아니라 '결정 종류'로 나뉜다.** 상단 로스터 칩이 이미 프로젝트 축을 담당하므로, 본문이 같은 축을 또 쓰면 정보가 겹친다. 섹션 순서는 시급성 감쇠다 — 경고(지금) → 적용(오늘) → 실험(이번 주) → 수익(2주) → 만들 것(주말).
@@ -157,7 +173,7 @@ out/knowledge/
 | 렌더 | **자체 변환기(`to_html.py`)** | 리포트가 쓰는 문법만 지원하면 40줄이면 된다 |
 | 스타일 | 인라인 CSS, 시스템 폰트 | 외부 요청 0. 오프라인에서도 열린다 |
 | 테스트 | **stdlib `unittest`** | 프레임워크를 얹을 규모가 아니다 |
-| 외부 서비스 | HN Algolia API (무키) | 예정 추가분(Lobsters·GitHub Releases Atom·GeekNews)도 전부 무키 |
+| 외부 서비스 | HN Algolia · Lobsters `hottest.json` · GeekNews Atom · GitHub Releases Atom | 전부 무키·무인증 |
 | GitHub 신호 | `gh` CLI 경유 | 이미 인증돼 있고 파이썬 의존성이 늘지 않는다 |
 | 플랫폼 | **macOS 전용** | `launchd`·`osascript`·`open`에 묶여 있다 |
 
@@ -191,7 +207,7 @@ out/knowledge/
 
 ## 코드 아키텍처
 
-파일 1,230줄 규모다. 레이어를 얹지 않는다. 규칙 넷만 지킨다.
+파일 1,520줄 규모다. 레이어를 얹지 않는다. 규칙 넷만 지킨다.
 
 **1. 파일 안에서 2단을 유지한다.** 순수 함수를 위에, I/O는 `if __name__` 아래. 네 파일 모두 이미 이 형태다(`to_markdown`·`url_map`·`html_to_text`·`active_projects`가 순수, 네트워크와 파일 접근은 진입점). 읽는 순서가 데이터 흐름과 같아지는 것이 이 배치의 유일한 이득이므로, **`core/`·`io/` 디렉토리로 물리 분리하면 그 이득이 사라진다.**
 
@@ -199,12 +215,12 @@ out/knowledge/
 
 **3. 단계 간 계약은 "한 줄 형식 + dict"다.** `dataclass`·`TypedDict`는 런타임 검증을 하지 않으므로 JSON 경계에서 이름만 붙는 층이 된다. 실제 계약은 다이제스트 한 줄 형식과 `urls-DATE.json`이고, 검증은 진입점 `assert` 하나와 `.get()` 기본값, 그리고 사이드카가 없으면 해당 표시만 생략하는 정책으로 충분하다. 누적 번들도 같다 — 계약은 OKF frontmatter가 아니라 `knowledge.py`의 `ITEM` 정규식이다.
 
-**4. 파일은 축이 늘 때만 추가한다.** 줄 수로 쪼개지 않는다 — 표준 라이브러리도 `argparse.py` 2,650줄, `tarfile.py` 2,933줄이 단일 모듈이고, 과분해는 얕은 모듈과 층 넘는 수정 비용을 만든다. 이대로 했다 — git 스캔·GitHub 이벤트·편집기 창은 셋 다 `build_profile.py` 안이다(감지 축, 199 → 368줄). 지수 감쇠도 `build_profile.py`의 순수 함수로 들어갔다(`decay`·`_relative`·`focus`). 누적이 새 축이라 `knowledge.py`를 더했다. 남은 배치: 소스 3개 추가 → `sources.py` 하나(새 축), URL 정규화·다이제스트 줄 포맷 → 기존 파일의 순수 함수.
+**4. 파일은 축이 늘 때만 추가한다.** 줄 수로 쪼개지 않는다 — 표준 라이브러리도 `argparse.py` 2,650줄, `tarfile.py` 2,933줄이 단일 모듈이고, 과분해는 얕은 모듈과 층 넘는 수정 비용을 만든다. 이대로 했다 — git 스캔·GitHub 이벤트·편집기 창은 셋 다 `build_profile.py` 안이다(감지 축, 199 → 368줄). 지수 감쇠도 `build_profile.py`의 순수 함수로 들어갔다(`decay`·`_relative`·`focus`). 누적이 새 축이라 `knowledge.py`를 더했다. 소스 3개는 `sources.py` 하나로 들어갔다(선별 축).
 
 **하지 않는 것**: `dataclass`/`TypedDict` 계약 층, pydantic류 런타임 검증, `Source` 추상 클래스·포트-어댑터, `core/`·`io/` 디렉토리 분리, 줄 수 기반 분할 규칙, 단계 간 중간 스키마 파일.
 
 ## 확장 지점
 
-**정보 소스를 추가하려면** `fetch_hn.py`가 내놓는 다이제스트 한 줄 형식(`- [점수p/댓글c] #ID 제목`)에 맞춰 줄을 더하고 `urls-DATE.json`에 ID→URL을 넣으면 된다. 뒤 단계는 소스를 구분하지 않는다.
+**정보 소스를 추가하려면** `sources.py`에 함수 하나를 더한다. 다이제스트 한 줄 형식(`- [점수p/댓글c] #ID 제목`)에 맞추고 ID→URL 맵에 넣으면 뒤 단계는 소스를 구분하지 않는다. **ID에 접두사를 붙여야 한다**(`lob…`, `gn…`) — HN 숫자 ID와 겹치면 URL 맵이 서로를 덮어쓴다.
 
 **프롬프트를 고치는 것이 코드를 고치는 것보다 먼저다.** 선별 기준·리포트 구조·통과 조건은 전부 `prompt-*.md`에 있고, 파이프라인 코드는 그것을 옮기는 배관일 뿐이다.

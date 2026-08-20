@@ -202,6 +202,21 @@ class TestIngest(unittest.TestCase):
         self.assertIn('okf_version: "0.2"', open(os.path.join(root, "index.md")).read())
         self.assertTrue(os.path.exists(os.path.join(root, "log.md")))
 
+    def test_log_records_source_breakdown(self):
+        """추가한 소스가 실제로 리포트에 쓰이는지는 며칠 봐야 안다. 그때 이 줄이 없으면
+        후보 파일을 다시 파헤쳐야 한다 — ID 접두사가 소스다."""
+        write_day(self.out, "2026-08-20",
+                  [{"id": "1", "title": "hn", "project": "p", "why": "w"},
+                   {"id": "lobabc", "title": "lo", "project": "p", "why": "w"},
+                   {"id": "gn99", "title": "gn", "project": "p", "why": "w"}],
+                  {"1": "https://m.dev/1", "lobabc": "https://m.dev/2", "gn99": "https://m.dev/3"},
+                  "본문 [lo](https://m.dev/2) 끝")
+        ingest(self.out, "2026-08-20")
+        log = read_file(os.path.join(self.out, "knowledge", "log.md"))
+        self.assertIn("Lobsters 1/1", log)      # 채택/후보
+        self.assertIn("GeekNews 0/1", log)
+        self.assertIn("HN 0/1", log)
+
     def test_reingest_same_date_is_idempotent(self):
         """버그: 백필로 같은 날을 다시 돌리면 log.md에 같은 날짜 블록이 또 붙었다.
         항목 페이지는 URL 기준 합치기라 멱등인데 로그만 아니었다."""
