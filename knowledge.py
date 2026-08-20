@@ -28,19 +28,28 @@ ADOPTED, PENDING = "채택", "보류"
 ITEM = re.compile(r"^- (\d{4}-\d{2}-\d{2}) · \[(.*?)\]\((\S+?)\)(?: — (.*?))?(?: `#(\d+)`)?$")
 
 
+def _flat(s):
+    """한 줄로 눕힌다. 줄바꿈이 하나라도 남으면 그 항목은 다음 읽기에서 조용히 사라진다."""
+    return " ".join(str(s or "").split())
+
+
 def item_line(date, title, url, why="", hn_id=""):
     """항목 한 줄. 제목의 대괄호는 링크를 깨뜨리므로 지운다."""
-    safe = title.replace("[", "(").replace("]", ")").strip()
-    line = f"- {date} · [{safe}]({url})"
+    safe = _flat(title).replace("[", "(").replace("]", ")")
+    line = f"- {date} · [{safe}]({_flat(url).replace(' ', '%20')})"
     if why:
-        line += f" — {why.replace(chr(10), ' ').strip()}"
+        line += f" — {_flat(why)}"
     if hn_id:
         line += f" `#{hn_id}`"
     return line
 
 
-def parse_items(text, section):
-    """페이지 본문에서 한 섹션의 항목을 뽑는다. 형식이 안 맞는 줄은 버린다."""
+def parse_items(text, section, on_drop=None):
+    """페이지 본문에서 한 섹션의 항목을 뽑는다.
+
+    형식이 안 맞는 줄은 버리는데, **버린 줄은 다음 덮어쓰기에서 영구히 사라진다.**
+    그래서 조용히 버리지 않고 `on_drop`으로 알린다.
+    """
     body = text.split(f"# {section}", 1)
     if len(body) < 2:
         return []
@@ -52,6 +61,8 @@ def parse_items(text, section):
         if m:
             out.append({"date": m.group(1), "title": m.group(2), "url": m.group(3),
                         "why": m.group(4) or "", "id": m.group(5) or ""})
+        elif line.strip() and line.strip() != "(없음)" and on_drop:
+            on_drop(line.rstrip())
     return out
 
 
@@ -85,15 +96,23 @@ def render_page(kind, title, adopted, pending, now):
     return "\n".join(lines) + "\n"
 
 
+RESERVED = {"index", "log"}     # OKF §3.1 — 이 이름은 개념 문서가 쓸 수 없다
+
+
 def page_name(bucket):
-    """파일명. 경로 구분자만 막고 나머지는 그대로 둔다 — 한국어 주제도 파일명이 된다."""
-    return re.sub(r"[/\\:]+", "-", bucket.strip()) or "기타"
+    """파일명. `project` 값은 LLM이 채우므로 임의 문자열이라고 보고 다듬는다.
+
+    경로 구분자·제어문자를 막고 길이를 자른다. 예약 이름을 그대로 쓰면
+    생성된 `index.md`가 항목 페이지를 덮어써 그 주제가 통째로 사라진다.
+    """
+    safe = re.sub(r"[\x00-\x1f\x7f/\\:]+", "-", _flat(bucket)).strip(". -")[:80]
+    return f"{safe}-주제" if safe.lower() in RESERVED else (safe or "기타")
 
 
 def bundle_index(names, version="0.2"):
-    """번들 루트 index.md. okf_version은 여기에만 쓴다(§12)."""
+    """번들 루트 index.md. okf_version은 여기에만 쓴다(§12). names는 이미 파일명이다."""
     lines = ["---", f"okf_version: \"{version}\"", "---", "", "# 주제", ""]
-    lines += [f"* [{n}](/topics/{page_name(n)}.md) - {n} 관련 누적 항목" for n in sorted(names)]
+    lines += [f"* [{n}](/topics/{n}.md) - {n} 관련 누적 항목" for n in sorted(names)]
     return "\n".join(lines) + "\n"
 
 
@@ -159,23 +178,57 @@ if __name__ == "__main__":
         sys.exit(0)
 
     date = opt("--ingest")
-    assert date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", date), "사용법: --ingest YYYY-MM-DD"
+    if not (date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", date)):
+        sys.exit("사용법: knowledge.py --ingest YYYY-MM-DD | --pending [--days N] [--urls]")
     out = opt("--dir", "out")
-    cands = json.loads(read(os.path.join(out, f"candidates-{date}.json")) or "[]")
-    urls = json.loads(read(os.path.join(out, f"urls-{date}.json")) or "{}")
+
+    def load(path, default):
+        """망가진 JSON 하나가 아침 리포트를 날리지 않게 한다 — 철하기는 리포트보다 덜 중요하다."""
+        try:
+            return json.loads(read(os.path.join(out, path)) or "null") or default
+        except json.JSONDecodeError as e:
+            print(f"경고: {path} 를 읽지 못함 ({e}) — 건너뜀", file=sys.stderr)
+            return default
+
+    cands = load(f"candidates-{date}.json", [])
+    urls = load(f"urls-{date}.json", {})
     report = read(os.path.join(out, f"report-{date}.md"))
-    assert cands, f"후보가 없다: candidates-{date}.json"
+    if not isinstance(cands, list) or not cands:
+        sys.exit(f"철할 후보가 없다: candidates-{date}.json")
+
+    dropped = []
+    def items(text, section):
+        return parse_items(text, section, on_drop=dropped.append)
+
+    # 기존 페이지를 먼저 다 읽는다. 이유 둘:
+    #  1) 되살아난 항목의 URL은 오늘 urls 맵에 없다(어제 잡힌 것이다). 번들이 그 URL을 안다.
+    #  2) 보류 정리는 전역이어야 한다 — 재심 때 LLM이 project를 다르게 적으면
+    #     원래 페이지의 보류 항목이 영구히 남아 매일 다시 재심 대상으로 올라온다.
+    pages = {}
+    known_url = {}
+    if os.path.isdir(topics):
+        for name in sorted(os.listdir(topics)):
+            if not name.endswith(".md") or name == "index.md":
+                continue
+            text = read(os.path.join(topics, name))
+            pages[name[:-3]] = {s: items(text, s) for s in (ADOPTED, PENDING)}
+            for s in (ADOPTED, PENDING):
+                for it in pages[name[:-3]][s]:
+                    if it["id"]:
+                        known_url.setdefault(it["id"], it["url"])
 
     # 채택 판정: 리포트가 원문 URL로 링크하므로 URL 등장 여부가 그대로 판정이 된다.
-    fresh = {}
-    for c in cands:
-        hn = str(c.get("id") or "")
-        url = urls.get(hn) or f"https://news.ycombinator.com/item?id={hn}"
-        bucket = (c.get("project") or "기타").strip() or "기타"
+    fresh, today_adopted = {}, set()
+    for c in cands if isinstance(cands, list) else []:
+        hn = str((c or {}).get("id") or "")
+        url = urls.get(hn) or known_url.get(hn) or f"https://news.ycombinator.com/item?id={hn}"
+        bucket = _flat((c or {}).get("project")) or "기타"
         section = ADOPTED if url and url in report else PENDING
+        if section == ADOPTED:
+            today_adopted.add(url)
         fresh.setdefault(bucket, {ADOPTED: [], PENDING: []})[section].append(
-            {"date": date, "title": c.get("title") or url, "url": url,
-             "why": c.get("why") or "", "id": hn})
+            {"date": date, "title": _flat((c or {}).get("title")) or url, "url": url,
+             "why": _flat((c or {}).get("why")), "id": hn})
 
     os.makedirs(topics, exist_ok=True)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -186,26 +239,35 @@ if __name__ == "__main__":
     except Exception:      # noqa: BLE001 — 감지가 실패해도 철하는 것은 계속돼야 한다
         pass
 
-    revived = 0
+    # 채택된 URL은 어느 페이지에서도 보류로 남지 않는다.
     for bucket, new in fresh.items():
-        path = os.path.join(topics, f"{page_name(bucket)}.md")
-        old = read(path)
-        adopted = merge(parse_items(old, ADOPTED), new[ADOPTED])
-        # 전에 보류였다가 이번에 채택된 것은 보류에서 빼야 한다 — 그게 재심이 닫히는 지점이다.
-        taken = {i["url"] for i in adopted}
-        was_pending = {i["url"] for i in parse_items(old, PENDING)}
-        revived += len(was_pending & {i["url"] for i in new[ADOPTED]})
-        pending = [i for i in merge(parse_items(old, PENDING), new[PENDING]) if i["url"] not in taken]
-        kind = "Project" if bucket in projects else "Topic"
-        with open(path, "w") as f:
-            f.write(render_page(kind, bucket, adopted, pending, now))
+        page = pages.setdefault(page_name(bucket), {ADOPTED: [], PENDING: []})
+        page[ADOPTED] = merge(page[ADOPTED], new[ADOPTED])
+        page[PENDING] = merge(page[PENDING], new[PENDING])
+    taken = today_adopted | {i["url"] for p in pages.values() for i in p[ADOPTED]}
+    revived = sum(1 for p in pages.values() for i in p[PENDING] if i["url"] in today_adopted)
+    for name, page in pages.items():
+        page[PENDING] = [i for i in page[PENDING] if i["url"] not in taken]
 
-    names = [n[:-3] for n in os.listdir(topics) if n.endswith(".md") and n != "index.md"]
-    with open(os.path.join(root, "index.md"), "w") as f:
-        f.write(bundle_index(names))
-    with open(os.path.join(topics, "index.md"), "w") as f:
-        f.write("# 주제\n\n" + "\n".join(
-            f"* [{n}]({page_name(n)}.md) - {n} 관련 누적 항목" for n in sorted(names)) + "\n")
+    def write(path, text):
+        """원자적 쓰기. 정본이 여기 하나뿐이라 중간에 끊기면 그 주제가 통째로 사라진다."""
+        tmp = f"{path}.tmp"
+        with open(tmp, "w") as f:
+            f.write(text)
+        os.replace(tmp, path)
+
+    for name, page in pages.items():
+        kind = "Project" if name in projects else "Topic"
+        write(os.path.join(topics, f"{name}.md"),
+              render_page(kind, name, page[ADOPTED], page[PENDING], now))
+
+    names = sorted(pages)
+    write(os.path.join(root, "index.md"), bundle_index(names))
+    write(os.path.join(topics, "index.md"), "# 주제\n\n" + "\n".join(
+        f"* [{n}]({n}.md) - {n} 관련 누적 항목" for n in names) + "\n")
+    if dropped:
+        print(f"경고: 형식이 안 맞는 줄 {len(dropped)}개를 버렸다 — 첫 줄: {dropped[0][:80]}",
+              file=sys.stderr)
 
     # log.md는 최신이 위다(§9). 앞에 붙인다.
     n_ad = sum(len(v[ADOPTED]) for v in fresh.values())
