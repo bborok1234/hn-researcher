@@ -3,10 +3,12 @@
 PROFILE.md 생성용 원료 — profile.sh가 claude -p에 넣는다."""
 import json
 import os
+import subprocess
 import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
+from urllib.parse import unquote
 
 HOME = os.path.expanduser("~")
 NOW = time.time()
@@ -137,9 +139,9 @@ def codex():
     return "\n".join(lines)
 
 
-def active_projects(days=7, min_activity=3):
-    """최근 N일간 의미 있게 활동한 프로젝트의 basename 집합."""
-    names, cutoff = set(), NOW - days * 86400
+def _agent_counts(days):
+    """최근 N일간 에이전트 기록에 나타난 {프로젝트 절대경로: 건수}. 실제 프로젝트가 아닌 경로는 제외."""
+    cutoff = NOW - days * 86400
     hist = os.path.join(HOME, ".claude", "history.jsonl")
     counts = defaultdict(int)
     with open(hist) as f:
@@ -173,10 +175,177 @@ def active_projects(days=7, min_activity=3):
         "/tmp",
         "/var/folders",
     )
-    for proj, n in counts.items():
-        if n >= min_activity and proj not in ("?", HOME) and not proj.startswith(skip):
-            names.add(os.path.basename(proj.rstrip("/")))
-    return names
+    return {p: n for p, n in counts.items() if p not in ("?", HOME) and not p.startswith(skip)}
+
+
+def active_projects(days=7, min_activity=3):
+    """최근 N일간 의미 있게 활동한 프로젝트의 basename 집합.
+
+    에이전트 기록만 본다. git·GitHub·편집기 신호는 다이제스트만 살찌우고 여기엔 넣지 않는다 —
+    이 함수의 결과가 --check로 프로필 재생성을 트리거하므로, LLM이 프로필에 안 쓸 만한
+    이름(웹에서 커밋만 한 레포 등)이 섞이면 매일 재생성이 걸린다.
+    """
+    return {
+        os.path.basename(p.rstrip("/"))
+        for p, n in _agent_counts(days).items()
+        if n >= min_activity
+    }
+
+
+def _git(path, *args):
+    """git 한 방. 실패는 빈 문자열 — 레포가 아니거나 손상돼도 다이제스트는 계속 나와야 한다."""
+    try:
+        r = subprocess.run(("git", "-C", path) + args, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def git_activity(paths):
+    """디스크 git 스캔 — {경로: {last, commits, branch}}.
+
+    에이전트 기록에 나온 경로만 훑는다(홈 전체를 걷지 않는다). 대화만 한 레포와
+    코드가 실제로 나간 레포를 가르는 것이 목적이고, 브랜치명은 주제를 직접 말해준다.
+    커밋 수는 `--author`로 내 것만 센다 — 팀 레포에서 전체를 세면 남의 활동이 섞인다.
+    """
+    out = {}
+    for p in paths:
+        if not os.path.exists(os.path.join(p, ".git")):
+            continue
+        ts = _git(p, "log", "-1", "--format=%at")
+        if not ts.isdigit():
+            continue
+        me = _git(p, "config", "user.email")
+        n = _git(p, "rev-list", "--count", "--since=2.weeks", f"--author={me}", "HEAD")
+        out[p] = {
+            "last": int(ts),
+            "commits": int(n) if n.isdigit() else 0,
+            "branch": _git(p, "rev-parse", "--abbrev-ref", "HEAD"),
+        }
+    return out
+
+
+# 이벤트 타입 → 다이제스트 표기. 목록에 없는 타입은 버린다(Watch·Fork 등은 작업 신호가 아니다).
+GH_EVENTS = {
+    "PushEvent": "푸시",
+    "PullRequestEvent": "PR",
+    "PullRequestReviewEvent": "리뷰",
+    "PullRequestReviewCommentEvent": "리뷰코멘트",
+    "IssueCommentEvent": "코멘트",
+    "IssuesEvent": "이슈",
+    "CreateEvent": "생성",
+}
+
+
+def _gh(path):
+    """gh api 호출. gh가 없거나 미인증이면 None — 파이프라인은 이 신호 없이도 돌아야 한다."""
+    try:
+        r = subprocess.run(("gh", "api", path), capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def github_events(pages=3):
+    """내가 일으킨 GitHub 이벤트를 레포별로 집계 — {레포: {"last": ts, 표기: 건수}}.
+
+    로컬 기록에 없는 것을 준다: 내가 올린 PR·리뷰·코멘트. private·조직 레포도 보인다.
+    `/user/repos?sort=pushed`는 쓰지 않는다 — 남이 푸시한 팀 레포가 최신으로 올라와
+    '내 활동만' 선을 넘는다. 이벤트는 actor가 나인 것만 온다.
+    페이지는 3까지다 — 100건×3=300건이 상한이고 4페이지는 422로 죽는다.
+    """
+    me = _gh("user")
+    if not me or not me.get("login"):
+        return {}
+    repos = defaultdict(lambda: defaultdict(int))
+    for page in range(1, pages + 1):
+        batch = _gh(f"/users/{me['login']}/events?per_page=100&page={page}")
+        if not batch:
+            break
+        for e in batch:
+            label = GH_EVENTS.get(e.get("type"))
+            repo = ((e.get("repo") or {}).get("name") or "").strip()
+            if not label or not repo:
+                continue
+            ts = datetime.fromisoformat(e["created_at"].replace("Z", "+00:00")).timestamp()
+            r = repos[repo]
+            r[label] += 1
+            r["last"] = max(r["last"], ts)
+        if len(batch) < 100:
+            break
+    return repos
+
+
+def vscode_windows():
+    """열려 있는 VS Code 창 → (경로 목록, 마지막 활성 경로).
+
+    '지금 이 순간' 신호로 가장 순수하다. 열림/닫힘뿐이고 순위는 없지만,
+    lastActiveWindow 하나는 최근성을 준다.
+    """
+    p = os.path.join(HOME, "Library", "Application Support", "Code", "User",
+                     "globalStorage", "storage.json")
+
+    def folder(w):
+        f = ((w or {}).get("folder") or "")
+        return unquote(f[len("file://"):]) if f.startswith("file://") else ""
+
+    try:
+        with open(p) as f:
+            ws = json.load(f).get("windowsState") or {}
+    except (OSError, json.JSONDecodeError):
+        return [], ""
+    opened = [f for f in (folder(w) for w in ws.get("openedWindows") or []) if f]
+    return opened, folder(ws.get("lastActiveWindow"))
+
+
+def signals(days=14):
+    """git·GitHub·편집기 신호를 다이제스트 섹션으로. 에이전트 기록이 못 보는 것을 채운다."""
+    lines = []
+
+    git = git_activity(sorted(_agent_counts(days)))
+    lines += ["## 코드가 실제로 나간 곳 (디스크 git)", ""]
+    if git:
+        for p, g in sorted(git.items(), key=lambda x: -x[1]["last"]):
+            lines.append(
+                f"- **{os.path.basename(p.rstrip('/'))}** — 내 커밋 2주간 {g['commits']}건, "
+                f"브랜치 `{g['branch']}`, 마지막 커밋 {d(g['last'])}"
+            )
+        lines.append("")
+        lines.append("커밋 0건은 대화만 하고 코드는 안 나간 레포다.")
+    else:
+        lines.append("(git 레포로 잡힌 경로 없음)")
+    lines.append("")
+
+    lines += ["## GitHub에서 내가 한 일 (최근 이벤트 300건까지)", ""]
+    gh = github_events()
+    if gh:
+        for repo, counts in sorted(gh.items(), key=lambda x: -x[1]["last"]):
+            kinds = " · ".join(
+                f"{k} {v}" for k, v in sorted(counts.items(), key=lambda x: -x[1]) if k != "last"
+            )
+            lines.append(f"- **{repo}** — {kinds}, 마지막 {d(counts['last'])}")
+    else:
+        lines.append("(gh CLI 미설치·미인증이거나 이벤트 없음)")
+    lines.append("")
+
+    opened, active = vscode_windows()
+    lines += ["## 지금 VS Code에 열려 있는 것", ""]
+    if active or opened:
+        if active:
+            lines.append(f"- **{os.path.basename(active.rstrip('/'))}** (마지막 활성 창)")
+        for p in opened:
+            if p != active:
+                lines.append(f"- {os.path.basename(p.rstrip('/'))}")
+        lines.append("")
+        lines.append("열림/닫힘뿐이고 순위는 없다. 열려 있다는 것 자체가 '지금'의 신호다.")
+    else:
+        lines.append("(열린 창 정보 없음)")
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
@@ -196,3 +365,4 @@ if __name__ == "__main__":
     print(f"# 코딩 에이전트 사용 기록 다이제스트 (생성: {d(NOW)})\n")
     print(claude_code())
     print(codex())
+    print(signals())
