@@ -22,7 +22,7 @@
 
 ```
 https://github.com/bborok1234/hn-researcher 를 ~/tools/hn-researcher 에 클론하고,
-저장소의 INSTALL.md를 읽고 그대로 설치해줘.
+저장소의 docs/INSTALL.md를 읽고 그대로 설치해줘.
 설치가 끝나면 오늘 리포트를 열어서 내용이 내 실제 작업과 맞는지 같이 봐줘.
 ```
 
@@ -77,8 +77,8 @@ cd ~/tools/hn-researcher && ./install.sh
 그래서 세 단계로 나눈다 — 목록 전체를 한 번 읽고 후보를 고르고(1턴), 파이썬이 본문을 받아
 텍스트로 정리하고(LLM 미사용), 정리된 본문만으로 리포트를 쓴다(1턴). 회당 22만 토큰이다.
 
-왜 이렇게 됐는지, 어떤 함정을 밟았는지는 [ARCHITECTURE.md](ARCHITECTURE.md)에 적어 뒀다.
-무엇을 하고 무엇을 안 하기로 했는지는 [ROADMAP.md](ROADMAP.md)에 있다.
+왜 이렇게 됐는지, 어떤 함정을 밟았는지는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)에 적어 뒀다.
+무엇을 하고 무엇을 안 하기로 했는지는 [docs/ROADMAP.md](docs/ROADMAP.md)에 있다.
 
 ## 개인정보
 

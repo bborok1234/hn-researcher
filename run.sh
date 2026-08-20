@@ -36,7 +36,7 @@ PENDING=$(python3 knowledge.py --pending --days 14 2>/dev/null || true)
 python3 knowledge.py --pending --days 14 --urls > "out/pending-urls-$DATE.json" 2>/dev/null || echo '{}' > "out/pending-urls-$DATE.json"
 
 MIN_BYTES=200 ./gen_report.sh "out/candidates-$DATE.json" <<EOF
-$(cat prompt-select.md)
+$(cat prompts/select.md)
 
 ## 활동 중인 프로젝트 목록 (최근 14일 — 전부 검토 대상)
 $PROJECTS
@@ -67,7 +67,7 @@ python3 fetch_pages.py "out/candidates-$DATE.json" "out/urls-$DATE.json" \
 echo "   본문 수집 완료: $(wc -c < out/pages-$DATE.md) bytes"
 
 ./gen_report.sh "out/report-$DATE.md" <<EOF
-$(cat prompt-write.md)
+$(cat prompts/write.md)
 
 ## 발행일
 이 리포트의 발행일은 **$DATE**(한국 시간)다. 제목에 반드시 이 날짜를 쓴다.
