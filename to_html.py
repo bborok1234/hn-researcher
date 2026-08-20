@@ -205,7 +205,8 @@ def roster(md, report_path):
     known = []
     if date:
         try:
-            known = [l.strip().lstrip("- ").strip() for l in open(os.path.join(d, f"projects-{date.group(1)}.txt"))]
+            with open(os.path.join(d, f"projects-{date.group(1)}.txt")) as fh:
+                known = [l.strip().lstrip("- ").strip() for l in fh]
             known = [k for k in known if SLUG.match(k)]
         except OSError:
             known = []

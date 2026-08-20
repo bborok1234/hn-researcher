@@ -17,4 +17,5 @@ logs/
 # 기타
 .DS_Store
 __pycache__/
+tests/tmp*/
 digest-profile.md
