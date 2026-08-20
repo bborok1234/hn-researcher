@@ -57,6 +57,50 @@ class TestGitActivity(unittest.TestCase):
             self.assertEqual(bp.git_activity([d])[d]["commits"], 0)  # 3이 아니다
 
 
+class TestFocus(unittest.TestCase):
+    """집중도 감쇠. focus()는 순수 함수라 목킹 없이 값만 넣어 검증한다."""
+
+    def setUp(self):
+        self._now, bp.NOW = bp.NOW, 1_800_000_000.0
+
+    def tearDown(self):
+        bp.NOW = self._now
+
+    def _ago(self, days, n=1):
+        return [bp.NOW - days * 86400] * n
+
+    def test_recent_few_beats_old_many(self):
+        """이 항목의 존재 이유. 총량으로 재면 '2주 전에 몰아서 한 것'과
+        '어제부터 붙어 있는 것'이 같은 값이 나온다 — 그 구분이 목적이다."""
+        self.assertGreater(bp.decay(self._ago(0, 5)), bp.decay(self._ago(14, 200)))
+
+    def test_same_count_recent_wins(self):
+        self.assertGreater(bp.decay(self._ago(1, 10)), bp.decay(self._ago(7, 10)))
+
+    def test_future_timestamp_not_amplified(self):
+        """시계가 틀어져 미래 시각이 들어오면 exp(양수)로 폭발한다 — 1로 막는다."""
+        self.assertAlmostEqual(bp.decay([bp.NOW + 86400]), 1.0)
+
+    def test_ranks_by_all_signals(self):
+        """에이전트 활동이 적어도 커밋·GitHub·편집기가 붙으면 위로 온다.
+        로컬 프롬프트 19건짜리 프로젝트가 GitHub PR로 승격된 실제 사례가 이 모양이다."""
+        events = {"/p/quiet": self._ago(0, 3), "/p/chatty": self._ago(10, 300)}
+        git = {"/p/quiet": {"ts": self._ago(0, 5)}}
+        gh = {"o/quiet": {"ts": self._ago(0, 8)}}
+        ranked = bp.focus(events, git, gh, ["/p/quiet"], "/p/quiet")
+        self.assertEqual(ranked[0][0], "quiet")
+        self.assertIn("편집기 마지막 활성 창", ranked[0][1])
+
+    def test_floor_drops_tail(self):
+        """감쇠를 걸면 '2주 전에 한 번 만진 것'이 꼬리로 남는다. 순위에 넣으면 패딩이다."""
+        events = {"/p/live": self._ago(0, 100), "/p/stale": self._ago(13, 1)}
+        names = [n for n, _ in bp.focus(events, {}, {}, [], "")]
+        self.assertEqual(names, ["live"])
+
+    def test_empty_input_is_not_fatal(self):
+        self.assertEqual(bp.focus({}, {}, {}, [], ""), [])
+
+
 class TestGithubEvents(unittest.TestCase):
     def setUp(self):
         self._gh = bp._gh
@@ -86,9 +130,9 @@ class TestGithubEvents(unittest.TestCase):
                      self._ev("PullRequestEvent", "o/r"), self._ev("WatchEvent", "o/other")]])
         out = bp.github_events()
         self.assertEqual(set(out), {"o/r"})
-        self.assertEqual(out["o/r"]["푸시"], 2)
-        self.assertEqual(out["o/r"]["PR"], 1)
-        self.assertGreater(out["o/r"]["last"], 0)
+        self.assertEqual(out["o/r"]["counts"]["푸시"], 2)
+        self.assertEqual(out["o/r"]["counts"]["PR"], 1)
+        self.assertEqual(len(out["o/r"]["ts"]), 3)
 
     def test_stops_on_short_page(self):
         """4페이지는 422로 죽는다. 100건 미만이 오면 더 부르지 않는다."""
@@ -103,7 +147,7 @@ class TestGithubEvents(unittest.TestCase):
                      {"type": "PushEvent", "repo": {"name": "o/r"}, "created_at": "깨진값"},
                      self._ev("PushEvent", "o/r")]])
         out = bp.github_events()
-        self.assertEqual(out["o/r"]["푸시"], 1)
+        self.assertEqual(out["o/r"]["counts"]["푸시"], 1)
 
     def test_no_gh_returns_empty(self):
         """gh가 없거나 미인증이어도 다이제스트는 나와야 한다."""
