@@ -101,7 +101,12 @@ def collect(c):
 
 if __name__ == "__main__":
     cands = json.load(open(sys.argv[1]))
-    urls = json.load(open(sys.argv[2])) if len(sys.argv) > 2 else {}
+    # URL 맵은 여러 개를 받아 합친다. 오늘 것 + 지난 보류 항목(재심으로 되살아난 것)의 맵이
+    # 따로 오기 때문이다 — 선별 목록에는 URL을 넣지 않으므로(토큰 레버) 여기서 되찾아야 한다.
+    urls = {}
+    for p in sys.argv[2:]:
+        with open(p) as f:
+            urls.update(json.load(f))
     for c in cands:
         if not c.get("url"):
             c["url"] = urls.get(str(c.get("id")), "")

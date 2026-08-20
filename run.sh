@@ -20,6 +20,11 @@ echo "1/3 수집 완료: out/digest-$DATE.md ($(grep -c '^- ' out/digest-$DATE.m
 PROJECTS=$(python3 build_profile.py --list)
 print -r -- "$PROJECTS" > "out/projects-$DATE.txt"   # 화면의 로스터 칩이 이 목록과 대조한다
 
+# 재심 대상: 전에 후보였지만 리포트에 못 오른 항목. 오늘 것과 동등하게 경쟁만 하고
+# 별도 지면을 갖지 않는다 — 미독 백로그를 만들지 않는 것이 이 설계의 선이다.
+PENDING=$(python3 knowledge.py --pending --days 14 2>/dev/null || true)
+python3 knowledge.py --pending --days 14 --urls > "out/pending-urls-$DATE.json" 2>/dev/null || echo '{}' > "out/pending-urls-$DATE.json"
+
 MIN_BYTES=200 ./gen_report.sh "out/candidates-$DATE.json" <<EOF
 $(cat prompt-select.md)
 
@@ -28,6 +33,9 @@ $PROJECTS
 
 ## 내 프로필
 $(cat PROFILE.md)
+
+## 지난 후보 중 아직 리포트에 오르지 않은 것 (재심 대상)
+$PENDING
 
 ## 오늘의 HN 게시물 전체 목록
 $(cat out/digest-$DATE.md)
@@ -44,7 +52,7 @@ json.dump(json.loads(m.group()), open(p, "w"), ensure_ascii=False)
 PY
 echo "2/3 선별 완료: $(python3 -c "import json;print(len(json.load(open('out/candidates-$DATE.json'))))")건"
 
-python3 fetch_pages.py "out/candidates-$DATE.json" "out/urls-$DATE.json" > "out/pages-$DATE.md"
+python3 fetch_pages.py "out/candidates-$DATE.json" "out/urls-$DATE.json" "out/pending-urls-$DATE.json" > "out/pages-$DATE.md"
 echo "   본문 수집 완료: $(wc -c < out/pages-$DATE.md) bytes"
 
 ./gen_report.sh "out/report-$DATE.md" <<EOF
@@ -64,3 +72,7 @@ $(cat out/pages-$DATE.md)
 EOF
 
 echo "3/3 리포트 완료: out/report-$DATE.md"
+
+# 오늘 후보 전부를 주제별로 철한다. 채택/보류를 가르고, 보류가 나중에 채택되면 되살아남으로 센다.
+# LLM을 쓰지 않는다 — 0토큰. 종합은 위 작문 턴에서 이미 끝났고 여기서는 철하기만 한다.
+python3 knowledge.py --ingest "$DATE"
