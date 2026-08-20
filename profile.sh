@@ -10,6 +10,12 @@ cd "$(dirname "$0")"
 [ -f config.sh ] && source ./config.sh
 
 mkdir -p out
+# 덮어쓰기 전에 사본을 남긴다. 손으로 고친 부분이 재생성에서 살아남게 하는 것은 아직 못 하지만,
+# 최소한 무엇이 어떻게 바뀌었는지는 diff로 볼 수 있어야 한다.
+# ponytail: 날짜당 하나(-n). 같은 날 두 번 돌리면 그날 첫 사본이 유지된다.
+# `[ 조건 ] && cp`로 쓰지 않는다 — set -e 아래에서 조건이 거짓일 때의 종료 코드를 신경 써야 한다.
+cp -n PROFILE.md "out/PROFILE-$(date +%F).md" 2>/dev/null || true
+
 python3 build_profile.py > out/digest-profile.md
 echo "활동 다이제스트 생성 완료 ($(wc -l < out/digest-profile.md)줄)"
 
