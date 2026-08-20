@@ -21,7 +21,7 @@
 코딩 에이전트(Claude Code)에 아래를 그대로 붙여 넣는다.
 
 ```
-<REPO_URL> 를 ~/tools/hn-researcher 에 클론하고,
+https://github.com/bborok1234/hn-researcher 를 ~/tools/hn-researcher 에 클론하고,
 저장소의 INSTALL.md를 읽고 그대로 설치해줘.
 설치가 끝나면 오늘 리포트를 열어서 내용이 내 실제 작업과 맞는지 같이 봐줘.
 ```
@@ -29,7 +29,7 @@
 터미널에서 직접 하려면:
 
 ```sh
-git clone <REPO_URL> ~/tools/hn-researcher
+git clone https://github.com/bborok1234/hn-researcher ~/tools/hn-researcher
 cd ~/tools/hn-researcher && ./install.sh
 ```
 
