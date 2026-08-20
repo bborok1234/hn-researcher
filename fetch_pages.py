@@ -86,7 +86,9 @@ def hn_comments(item_id):
 def collect(c):
     """후보 하나를 수집. (candidate, 본문 or None, 실패사유 or None)"""
     try:
-        if c.get("source") == "comments" and c.get("id"):
+        # HN 외 소스(lob·gn 접두사)는 Algolia에 없다. 숫자 ID만 댓글 경로로 보낸다 —
+        # 안 막으면 Lobsters/GeekNews의 comments 후보가 전부 404로 죽는다.
+        if c.get("source") == "comments" and str(c.get("id") or "").isdigit():
             body = hn_comments(c["id"])
         else:
             body = html_to_text(get(c["url"]))

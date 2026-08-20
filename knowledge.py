@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 ADOPTED, PENDING = "채택", "보류"
 # 항목 한 줄의 형식이 이 파일의 실제 계약이다. frontmatter가 아니라 이 정규식이다.
-ITEM = re.compile(r"^- (\d{4}-\d{2}-\d{2}) · \[(.*?)\]\((\S+?)\)(?: — (.*?))?(?: `#(\d+)`)?$")
+ITEM = re.compile(r"^- (\d{4}-\d{2}-\d{2}) · \[(.*?)\]\((\S+?)\)(?: — (.*?))?(?: `#([^`\s]+)`)?$")
 
 
 def _flat(s):
@@ -116,11 +116,24 @@ def bundle_index(names, version="0.2"):
     return "\n".join(lines) + "\n"
 
 
-def log_entry(date, adopted, pending, revived):
-    """log.md 한 날. 날짜 제목은 ISO 8601이어야 한다(§9)."""
+def source_of(item_id):
+    """ID 접두사가 소스다. HN은 숫자, `lob…`은 Lobsters, `gn…`은 GeekNews."""
+    i = str(item_id or "")
+    return "Lobsters" if i.startswith("lob") else "GeekNews" if i.startswith("gn") else "HN"
+
+
+def log_entry(date, adopted, pending, revived, by_source=None):
+    """log.md 한 날. 날짜 제목은 ISO 8601이어야 한다(§9).
+
+    소스별 수를 함께 남긴다. 추가한 소스가 실제로 리포트에 쓰이는지는 며칠 봐야 알고,
+    그때 이 줄이 없으면 후보 파일을 다시 파헤쳐야 한다.
+    """
     line = f"- 채택 {adopted}건, 보류 {pending}건"
     if revived:
         line += f", **되살아남 {revived}건**"   # 보류가 나중에 채택된 것 — 재심이 값을 한 증거
+    if by_source:
+        parts = ", ".join(f"{s} {n[0]}/{n[0] + n[1]}" for s, n in sorted(by_source.items()))
+        line += f"\n- 소스별 채택/후보 — {parts}"
     return f"## {date}\n\n{line}\n"
 
 
@@ -191,7 +204,13 @@ if __name__ == "__main__":
             return default
 
     cands = load(f"candidates-{date}.json", [])
-    urls = load(f"urls-{date}.json", {})
+    # URL 맵 전부를 합친다. HN 외 소스(urls-extra)와 재심 항목(pending-urls)이 따로 오므로
+    # 오늘 것만 읽으면 그 항목들의 URL을 못 찾아 조용히 버려진다.
+    urls = {}
+    for name in (f"urls-{date}.json", f"urls-extra-{date}.json", f"pending-urls-{date}.json"):
+        got = load(name, {})
+        if isinstance(got, dict):
+            urls.update(got)
     report = read(os.path.join(out, f"report-{date}.md"))
     if not isinstance(cands, list) or not cands:
         sys.exit(f"철할 후보가 없다: candidates-{date}.json")
@@ -221,7 +240,12 @@ if __name__ == "__main__":
     fresh, today_adopted = {}, set()
     for c in cands if isinstance(cands, list) else []:
         hn = str((c or {}).get("id") or "")
-        url = urls.get(hn) or known_url.get(hn) or f"https://news.ycombinator.com/item?id={hn}"
+        # HN 폴백은 숫자 ID에만 유효하다 — lob·gn 접두사는 그 주소가 없다.
+        url = (urls.get(hn) or known_url.get(hn)
+               or (f"https://news.ycombinator.com/item?id={hn}" if hn.isdigit() else ""))
+        if not url:
+            dropped.append(f"URL을 찾을 수 없는 후보: #{hn}")
+            continue
         bucket = _flat((c or {}).get("project")) or "기타"
         section = ADOPTED if url and url in report else PENDING
         if section == ADOPTED:
@@ -272,11 +296,16 @@ if __name__ == "__main__":
     # log.md는 최신이 위다(§9). 앞에 붙인다.
     n_ad = sum(len(v[ADOPTED]) for v in fresh.values())
     n_pd = sum(len(v[PENDING]) for v in fresh.values())
+    by_source = {}
+    for v in fresh.values():
+        for section, idx in ((ADOPTED, 0), (PENDING, 1)):
+            for it in v[section]:
+                by_source.setdefault(source_of(it["id"]), [0, 0])[idx] += 1
     log_path = os.path.join(root, "log.md")
     prev = read(log_path)
     head = "# 인제스트 기록\n\n"
     body = log_drop(prev[len(head):] if prev.startswith(head) else prev, date)
     with open(log_path, "w") as f:
-        f.write(head + log_entry(date, n_ad, n_pd, revived) + ("\n" + body.lstrip("\n")
+        f.write(head + log_entry(date, n_ad, n_pd, revived, by_source) + ("\n" + body.lstrip("\n")
                                                                if body.strip() else ""))
     print(f"철함: 채택 {n_ad} / 보류 {n_pd} / 되살아남 {revived} → {root}")

@@ -16,3 +16,9 @@ ENABLE_WEEKLY=1
 
 # 리포트 완성 후 브라우저로 자동으로 열기
 OPEN_BROWSER=1
+
+# GitHub Releases를 볼 레포. 공백으로 구분한 owner/repo.
+# 여기 있는 것은 선별(LLM)을 건너뛰고 바로 리포트로 간다 — 내가 정한 목록이라
+# 관련성이 100%고, 릴리스 노트가 곧 본문이라 수집 단계도 필요 없다.
+# breaking change를 놓치면 아픈 것만 넣을 것. 비워두면 이 소스는 꺼진다.
+RELEASE_REPOS="anthropics/claude-code openai/codex"
