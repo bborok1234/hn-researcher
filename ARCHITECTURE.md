@@ -85,13 +85,26 @@ to_html.py ──→ report-DATE.html       뉴스레터
 
 ## 스택
 
-의존성을 늘리지 않는 것이 설계 목표다.
+확정된 목록이다. 여기에 없는 것을 추가하려면 먼저 물어볼 것.
 
-- **python3 표준 라이브러리만** — `urllib`, `json`, `html.parser`, `concurrent.futures`. 추가 패키지 0. HTML→텍스트 변환도 `HTMLParser` 서브클래스로 직접 한다
-- **zsh** — 진입점과 배선
-- **claude CLI** — 판단이 필요한 두 단계에서만
-- **macOS** — `launchd`, `osascript`(알림), `open`
-- **외부 서비스** — HN Algolia API만. 무키·무인증
+| 층 | 결정 | 이유 |
+|---|---|---|
+| 로직 | **python3 (시스템 파이썬)** | macOS 기본 탑재. 설치 단계가 없다 |
+| 의존성 | **표준 라이브러리만, 0개** | `urllib`·`json`·`html.parser`·`concurrent.futures`·`sqlite3`로 예정 기능까지 전부 된다. 클론 후 즉시 실행이 깨지지 않는다 |
+| 배선 | **zsh** | 진입점과 launchd 접착제만. 로직은 넣지 않는다 |
+| LLM 호출 | **`claude -p` CLI, 구독 인증** | 구독료를 이미 낸다. Messages API는 옵션으로만 두고 기본 경로로 삼지 않는다 |
+| 모델 | 일일 `sonnet` / 주간 상위 모델 | 호출마다 `--model` 명시. 생략하면 대화용 기본값을 물려받아 사용량이 몇 배가 된다 |
+| 스케줄 | **launchd 단독** | cron은 GUI 세션 밖이라 키체인에 못 닿아 인증이 항상 실패한다 |
+| 저장 | **파일시스템, 날짜 키 사이드카** | grep이 되는 것이 1인 도구에서 가장 빠른 조회다 |
+| 누적 지식 | markdown 정본 + `sqlite3` 파생 인덱스 (예정) | 인덱스는 언제든 버리고 재생성 가능해야 한다 |
+| 렌더 | **자체 변환기(`to_html.py`)** | 리포트가 쓰는 문법만 지원하면 40줄이면 된다 |
+| 스타일 | 인라인 CSS, 시스템 폰트 | 외부 요청 0. 오프라인에서도 열린다 |
+| 테스트 | **stdlib `unittest`** | 프레임워크를 얹을 규모가 아니다 |
+| 외부 서비스 | HN Algolia API (무키) | 예정 추가분(Lobsters·GitHub Releases Atom·GeekNews)도 전부 무키 |
+| GitHub 신호 | `gh` CLI 경유 (예정) | 이미 인증돼 있고 파이썬 의존성이 늘지 않는다 |
+| 플랫폼 | **macOS 전용** | `launchd`·`osascript`·`open`에 묶여 있다 |
+
+**쓰지 않기로 한 것**: uv·pyproject(클론 후 즉시 실행이 깨진다), pytest, 서드파티 HTTP·HTML·템플릿 라이브러리, pandoc, 벡터스토어, 그래프DB, 서버, Docker.
 
 서버가 없다. 사용 기록은 로컬에서만 읽고, 외부로 나가는 것은 리포트 생성 프롬프트뿐이다.
 
