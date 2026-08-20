@@ -6,21 +6,21 @@
 set -e
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 cd "$(dirname "$0")"
-mkdir -p logs
+mkdir -p logs out
 [ -f config.sh ] && source ./config.sh
 
 DATE=$(date +%F)
-[ -f "report-weekly-$DATE.html" ] && exit 0
+[ -f "out/report-weekly-$DATE.html" ] && exit 0
 
-WEEK_REPORTS=$(cat $(ls -t report-2*.md 2>/dev/null | grep -v weekly | head -7) 2>/dev/null || true)
-WEEK_PAGES=$(cat $(ls -t pages-2*.md 2>/dev/null | head -7) 2>/dev/null || true)
+WEEK_REPORTS=$(cat $(ls -t out/report-2*.md 2>/dev/null | grep -v weekly | head -7) 2>/dev/null || true)
+WEEK_PAGES=$(cat $(ls -t out/pages-2*.md 2>/dev/null | head -7) 2>/dev/null || true)
 
 if [ -z "$WEEK_REPORTS" ]; then
   echo "지난 주 일간 리포트가 없어 건너뜀"
   exit 0
 fi
 
-MODEL="${WEEKLY_MODEL:-fable}" ./gen_report.sh "report-weekly-$DATE.md" <<EOF
+MODEL="${WEEKLY_MODEL:-fable}" ./gen_report.sh "out/report-weekly-$DATE.md" <<EOF
 $(cat prompt-weekly.md)
 
 ## 발행일
@@ -36,8 +36,8 @@ $WEEK_REPORTS
 $WEEK_PAGES
 EOF
 
-python3 to_html.py "report-weekly-$DATE.md" > "report-weekly-$DATE.html"
+python3 to_html.py "out/report-weekly-$DATE.md" > "out/report-weekly-$DATE.html"
 osascript -e "display notification \"주간 수익 기회 리포트\" with title \"hn-researcher $DATE\" sound name \"Glass\"" || true
-[ "${OPEN_BROWSER:-1}" = "1" ] && { open "report-weekly-$DATE.html" || true; }
-echo "주간 리포트 완료: report-weekly-$DATE.md"
+[ "${OPEN_BROWSER:-1}" = "1" ] && { open "out/report-weekly-$DATE.html" || true; }
+echo "주간 리포트 완료: out/report-weekly-$DATE.md"
 exit 0

@@ -9,15 +9,16 @@ set -e
 cd "$(dirname "$0")"
 [ -f config.sh ] && source ./config.sh
 
-python3 build_profile.py > digest-profile.md
-echo "활동 다이제스트 생성 완료 ($(wc -l < digest-profile.md)줄)"
+mkdir -p out
+python3 build_profile.py > out/digest-profile.md
+echo "활동 다이제스트 생성 완료 ($(wc -l < out/digest-profile.md)줄)"
 
 MIN_BYTES=500 ./gen_report.sh PROFILE.md <<EOF
 $(cat prompt-profile.md)
 
 맨 위에 '<!-- profile.sh로 자동 생성: $(date +%F). 직접 수정 가능, 재생성 시 덮어씀 -->' 주석을 넣어라.
 
-$(cat digest-profile.md)
+$(cat out/digest-profile.md)
 EOF
 
 echo "PROFILE.md 갱신 완료"
