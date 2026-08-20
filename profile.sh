@@ -19,10 +19,16 @@ cp -n PROFILE.md "out/PROFILE-$(date +%F).md" 2>/dev/null || true
 python3 build_profile.py > out/digest-profile.md
 echo "활동 다이제스트 생성 완료 ($(wc -l < out/digest-profile.md)줄)"
 
+# 커버리지 체크리스트. --check가 이 목록으로 누락을 판정하므로 프롬프트에도 같은 목록을 준다 —
+# 안 주면 프로필이 빠뜨린 이름이 매일 누락으로 잡혀 재생성이 무한히 트리거된다.
+# (run.sh가 리포트 프롬프트에 넣는 것과 같은 방식이다.)
 MIN_BYTES=500 ./gen_report.sh PROFILE.md <<EOF
 $(cat prompt-profile.md)
 
 맨 위에 '<!-- profile.sh로 자동 생성: $(date +%F). 직접 수정 가능, 재생성 시 덮어씀 -->' 주석을 넣어라.
+
+## 반드시 다뤄야 하는 프로젝트 (최근 14일 활동 — 1번이나 2번에 전부 등장해야 한다)
+$(python3 build_profile.py --list)
 
 $(cat out/digest-profile.md)
 EOF
