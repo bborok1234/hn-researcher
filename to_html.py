@@ -32,6 +32,33 @@ def slugs(text):
     return out
 
 
+# file:// 은 보안 컨텍스트가 아니어서 navigator.clipboard가 막힐 수 있다.
+# execCommand는 폐기 예정이지만 로컬 파일에서 유일하게 확실히 되는 경로다.
+SCRIPT = """<script>
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest(".cp");
+  if (!b) return;
+  const text = b.dataset.md || "";
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (_) {}
+  if (!ok) {
+    const t = document.createElement("textarea");
+    t.value = text;
+    t.setAttribute("readonly", "");
+    t.style.position = "fixed";
+    t.style.top = "-1000px";
+    document.body.appendChild(t);
+    t.select();
+    try { ok = document.execCommand("copy"); } catch (_) {}
+    t.remove();
+  }
+  b.textContent = ok ? "복사됨" : "실패";
+  b.setAttribute("data-done", "");
+  setTimeout(() => { b.textContent = "복사"; b.removeAttribute("data-done"); }, 1400);
+});
+</script>"""
+
+
 def tokenize(md):
     """(kind, text) 목록으로 정규화. kind: h1 h2 h3 li p hr
     섹션 제목 표기가 두 가지라 여기서 한 번만 흡수하고, 이후 로직은 이 결과만 본다."""
@@ -59,6 +86,17 @@ def tokenize(md):
             yield "li", line[2:]
             continue
         yield "p", line
+
+
+def copy_button(md_line):
+    """항목의 **마크다운 원문**을 복사하는 버튼.
+
+    화면에서는 URL을 `도메인 ↗`로 줄여 보여주므로(읽는 흐름을 지키려고) 본문을 드래그해
+    복사하면 링크가 빠진다. 아침에 읽고 바로 에이전트에 붙이는 것이 이 리포트의 주 용도라,
+    붙였을 때 링크와 실행 한 줄이 함께 가야 한다. 그래서 렌더된 텍스트가 아니라 원문을 준다.
+    """
+    return ('<button class="cp" type="button" aria-label="이 항목을 마크다운으로 복사" '
+            f'data-md="{html.escape(md_line.strip(), quote=True)}">복사</button>')
 
 
 def source_link(url):
@@ -148,7 +186,7 @@ def convert(md):
             if not in_list:
                 out.append("<ul>")
                 in_list = True
-            out.append(f"<li>{inline(text)}</li>")
+            out.append(f"<li>{inline(text)}{copy_button(text)}</li>")
         elif kind == "hr":
             out.append("<hr>")
         elif kind == "h2":
@@ -262,6 +300,17 @@ ul li > strong:first-child{
   display:inline-block; font-family:var(--mono); font-size:12.5px; font-weight:600;
   color:var(--signal); letter-spacing:-.1px;
 }
+.cp{
+  font-family:var(--mono); font-size:10.5px; line-height:1; cursor:pointer;
+  margin-left:7px; padding:3px 6px; border-radius:3px; vertical-align:1px;
+  background:transparent; border:1px solid var(--line); color:var(--dim);
+  opacity:0; transition:opacity .12s, color .12s, border-color .12s;
+}
+ul li:hover .cp, .cp:focus-visible{opacity:1}
+.cp:hover{color:var(--signal); border-color:var(--signal)}
+.cp[data-done]{opacity:1; color:var(--signal); border-color:var(--signal)}
+/* 터치 기기엔 hover가 없다 — 항상 보인다 */
+@media (hover:none){.cp{opacity:.65}}
 strong{color:#fff; font-weight:700}
 a{color:var(--paper); text-decoration:none; border-bottom:1px solid rgba(255,180,92,.45)}
 a:hover{color:var(--signal); border-bottom-color:var(--signal)}
@@ -325,4 +374,4 @@ if __name__ == "__main__":
 {f'<ol class="leads">{"".join(lead_items)}</ol>' if lead_items else ""}
 {convert(md)}
 <p class="foot">hn-researcher · 매일 아침 자동 발행</p>
-</div></body></html>""")
+</div>{SCRIPT}</body></html>""")

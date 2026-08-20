@@ -44,6 +44,9 @@ $PROJECTS
 ## 내 프로필
 $(cat PROFILE.md)
 
+## 프로젝트 밖에서 관심 있는 것 (손으로 쓴 것 — 프로젝트와 동등하게 취급)
+$(cat INTERESTS.md 2>/dev/null)
+
 ## 지난 후보 중 아직 리포트에 오르지 않은 것 (재심 대상)
 $PENDING
 
@@ -77,6 +80,9 @@ $PROJECTS
 
 ## 내 프로필
 $(cat PROFILE.md)
+
+## 프로젝트 밖에서 관심 있는 것 (손으로 쓴 것)
+$(cat INTERESTS.md 2>/dev/null)
 
 ## 지난 24시간 릴리스 (선별을 거치지 않은 것 — '경고' 섹션의 주 재료)
 $(cat out/releases-$DATE.md)
