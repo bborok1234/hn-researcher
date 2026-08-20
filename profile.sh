@@ -1,6 +1,10 @@
 #!/bin/zsh
 # Claude Code + Codex 사용 기록으로 PROFILE.md를 자동 생성/갱신한다.
 # 사용법: ./profile.sh
+#
+# LLM 호출은 gen_report.sh를 경유한다 — 재시도·출력 검증·도구 차단·stdin 처리가
+# 거기 한 곳에 있다. 직접 claude -p를 부르면 그 보호가 빠지고, API가 중간에
+# 끊길 때 잘린 PROFILE.md가 덮어써져 이후 모든 리포트가 깨진 프로필 위에 올라간다.
 set -e
 cd "$(dirname "$0")"
 [ -f config.sh ] && source ./config.sh
@@ -8,26 +12,12 @@ cd "$(dirname "$0")"
 python3 build_profile.py > digest-profile.md
 echo "활동 다이제스트 생성 완료 ($(wc -l < digest-profile.md)줄)"
 
-claude -p --model "${DAILY_MODEL:-sonnet}" --safe-mode "아래는 한 개발자의 Claude Code / Codex 사용 기록 다이제스트다.
-프로젝트별 프롬프트 수·기간·마지막 활동일과 실제 프롬프트 내용, Codex 스레드 제목을 근거로
-이 사람의 프로필을 작성하라. 형식은 markdown, 출력은 프로필 본문만 (인사말·설명 없이).
+MIN_BYTES=500 ./gen_report.sh PROFILE.md <<EOF
+$(cat prompt-profile.md)
 
-포함할 섹션:
-1. **지금 집중 중인 것** — 최근 2주 활동이 몰린 프로젝트, 무엇을 왜 하는지
-2. **방치/중단된 것** — 활동량은 있었는데 오래 멈춘 프로젝트, 재개 가치 판단
-3. **관심 기술과 일하는 방식** — 프롬프트에서 드러나는 기술 스택, 반복되는 관심사, 특징적인 작업 패턴
-4. **사업화·사이드 프로젝트 관심사** — 개인 프로젝트에서 드러나는 방향
-
-각 항목은 다이제스트의 실제 근거(프로젝트명, 날짜, 프롬프트 요지)를 들어라. 추측은 '추정'이라고 표시.
-
-1번과 2번에서 프로젝트를 하나 쓸 때마다 그 아래에 반드시 다음 한 줄을 붙여라:
-  \`매칭: 키워드1, 키워드2, ...\`
-이 줄은 '기술 뉴스 목록에서 이 프로젝트와 관련된 글을 골라낼 때 쓸 검색어'다.
-그 프로젝트가 쓰는 기술·다루는 도메인·풀려는 문제를 6~10개의 구체적 단어로 적어라.
-한국어와 영어를 섞어서 쓰고(영문 기술 용어가 실제 매칭에 쓰인다), '개발·AI' 같은 너무 넓은 말은 쓰지 마라.
-예: \`매칭: fountain pen, handwriting, typography, haptics, motion design, journaling, note-taking app, e-ink\`
 맨 위에 '<!-- profile.sh로 자동 생성: $(date +%F). 직접 수정 가능, 재생성 시 덮어씀 -->' 주석을 넣어라.
 
-$(cat digest-profile.md)" > PROFILE.md
+$(cat digest-profile.md)
+EOF
 
 echo "PROFILE.md 갱신 완료"

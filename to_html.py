@@ -15,117 +15,6 @@ import os
 import re
 import sys
 
-CSS = """
-:root{
-  --ink:#0d1220; --surface:#151d31; --line:#242f4d;
-  --paper:#e8ecf6; --muted:#8b95ad; --dim:#5c6580; --signal:#ffb45c; --signal-soft:rgba(255,180,92,.13);
-  --kr:'Apple SD Gothic Neo','Pretendard',system-ui,sans-serif;
-  --slab:'Superclarendon','Iowan Old Style','Charter',Georgia,serif;
-  --mono:'SF Mono',Menlo,Monaco,monospace;
-}
-*{box-sizing:border-box}
-body{
-  margin:0; background:var(--ink); color:var(--paper); font-family:var(--kr);
-  font-size:16.5px; line-height:1.85; -webkit-font-smoothing:antialiased;
-}
-/* 발행 시각이 새벽이라, 페이지 위쪽에 아주 옅은 동틀 무렵의 빛만 남긴다 */
-body::before{
-  content:''; position:fixed; inset:0 0 auto 0; height:340px; pointer-events:none;
-  background:radial-gradient(120% 100% at 50% 0%, rgba(255,180,92,.10), transparent 70%);
-}
-.wrap{position:relative; max-width:730px; margin:0 auto; padding:56px 24px 96px}
-
-/* ── 머리말 ───────────────────────────────────────── */
-.masthead{border-bottom:1px solid var(--line); padding-bottom:22px; margin-bottom:26px}
-h1{
-  font-size:30px; line-height:1.3; letter-spacing:-.4px; font-weight:800;
-  margin:0 0 10px;
-}
-.funnel{
-  font-family:var(--slab); font-size:14px; color:var(--muted); margin:0;
-  font-variant-numeric:tabular-nums;
-}
-.funnel b{color:var(--signal); font-weight:600}
-
-/* ── signature: 프로젝트 로스터 ───────────────────── */
-.roster{margin:0 0 40px}
-.roster-label{
-  font-size:11.5px; letter-spacing:.02em; color:var(--dim); margin:0 0 11px;
-}
-.chips{display:flex; flex-wrap:wrap; gap:6px; list-style:none; padding:0; margin:0}
-.chips li{margin:0; padding:6px 9px}
-.chips li::before{content:none}
-.chip{
-  font-family:var(--mono); font-size:11.5px; line-height:1; padding:6px 9px;
-  border:1px solid transparent; border-radius:3px; color:var(--dim);
-  animation:rise .5s both; animation-delay:calc(var(--i) * 35ms);
-}
-.chip.on{color:var(--signal); border-color:rgba(255,180,92,.42); background:var(--signal-soft)}
-@keyframes rise{from{opacity:0; transform:translateY(5px)} to{opacity:1; transform:none}}
-@media (prefers-reduced-motion:reduce){.chip{animation:none}}
-
-/* ── 헤드라인 ─────────────────────────────────────── */
-.leads{margin:0 0 44px; padding:0; list-style:none; counter-reset:lead}
-.leads li{
-  display:grid; grid-template-columns:30px 1fr; gap:4px; align-items:baseline;
-  padding:15px 0; border-top:1px solid var(--line); margin:0;
-}
-.leads li::marker{content:none}
-.leads-body{display:block; line-height:1.7}
-.leads li::before{
-  counter-increment:lead; content:counter(lead);
-  font-family:var(--slab); font-size:19px; color:var(--signal); line-height:1.5;
-}
-.leads strong{font-weight:700}
-
-/* ── 본문 ─────────────────────────────────────────── */
-h2{
-  font-size:12.5px; letter-spacing:.06em; font-weight:700; color:var(--signal);
-  margin:54px 0 20px; padding-bottom:9px; border-bottom:1px solid var(--line);
-}
-h3{
-  font-family:var(--mono); font-size:14px; font-weight:600; color:var(--paper);
-  margin:32px 0 10px; padding-left:11px; border-left:2px solid var(--signal);
-}
-/* 경고 섹션만 붉은 계열 — 나머지와 시급성이 다르다 */
-h2.warn{color:#ff8a6b; border-bottom-color:rgba(255,138,107,.35)}
-h2.warn + ul li::before{background:#ff8a6b}
-p{margin:0 0 15px}
-ul{padding-left:0; list-style:none; margin:0 0 15px}
-ul li{position:relative; padding-left:17px; margin-bottom:13px}
-ul li::before{
-  content:''; position:absolute; left:0; top:.72em; width:5px; height:1px;
-  background:var(--signal); opacity:.75;
-}
-/* 프로젝트 이름으로 시작하는 항목은 그 이름이 그 줄의 주인이다 */
-ul li > strong:first-child{
-  display:inline-block; font-family:var(--mono); font-size:12.5px; font-weight:600;
-  color:var(--signal); letter-spacing:-.1px;
-}
-strong{color:#fff; font-weight:700}
-a{color:var(--paper); text-decoration:none; border-bottom:1px solid rgba(255,180,92,.45)}
-a:hover{color:var(--signal); border-bottom-color:var(--signal)}
-a:focus-visible{outline:2px solid var(--signal); outline-offset:3px; border-radius:2px}
-a.src{
-  font-family:var(--mono); font-size:11px; color:var(--dim); border-bottom:0;
-  white-space:nowrap; padding-left:2px;
-}
-a.src:hover{color:var(--signal)}
-code{
-  font-family:var(--mono); font-size:.86em; background:var(--surface);
-  padding:1.5px 5px; border-radius:3px; color:#cfd7ea;
-}
-hr{border:0; border-top:1px solid var(--line); margin:34px 0}
-.foot{
-  margin-top:64px; padding-top:20px; border-top:1px solid var(--line);
-  font-family:var(--mono); font-size:11px; color:var(--dim); letter-spacing:.04em;
-}
-@media (max-width:560px){
-  body{font-size:16px}
-  .wrap{padding:36px 18px 72px}
-  h1{font-size:24px}
-}
-"""
 
 SLUG = re.compile(r"^[a-z][a-z0-9._-]{2,29}$")
 # 리포트는 섹션 제목을 '## 제목'으로도, 볼드 한 줄('**제목**')로도 쓴다 — 실행마다 흔들린다.
@@ -285,6 +174,118 @@ def leads(md):
             items.append(f'<li><span class="leads-body">{inline(text.strip())}</span></li>')
     return items[:3]
 
+
+CSS = """
+:root{
+  --ink:#0d1220; --surface:#151d31; --line:#242f4d;
+  --paper:#e8ecf6; --muted:#8b95ad; --dim:#5c6580; --signal:#ffb45c; --signal-soft:rgba(255,180,92,.13);
+  --kr:'Apple SD Gothic Neo','Pretendard',system-ui,sans-serif;
+  --slab:'Superclarendon','Iowan Old Style','Charter',Georgia,serif;
+  --mono:'SF Mono',Menlo,Monaco,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ink); color:var(--paper); font-family:var(--kr);
+  font-size:16.5px; line-height:1.85; -webkit-font-smoothing:antialiased;
+}
+/* 발행 시각이 새벽이라, 페이지 위쪽에 아주 옅은 동틀 무렵의 빛만 남긴다 */
+body::before{
+  content:''; position:fixed; inset:0 0 auto 0; height:340px; pointer-events:none;
+  background:radial-gradient(120% 100% at 50% 0%, rgba(255,180,92,.10), transparent 70%);
+}
+.wrap{position:relative; max-width:730px; margin:0 auto; padding:56px 24px 96px}
+
+/* ── 머리말 ───────────────────────────────────────── */
+.masthead{border-bottom:1px solid var(--line); padding-bottom:22px; margin-bottom:26px}
+h1{
+  font-size:30px; line-height:1.3; letter-spacing:-.4px; font-weight:800;
+  margin:0 0 10px;
+}
+.funnel{
+  font-family:var(--slab); font-size:14px; color:var(--muted); margin:0;
+  font-variant-numeric:tabular-nums;
+}
+.funnel b{color:var(--signal); font-weight:600}
+
+/* ── signature: 프로젝트 로스터 ───────────────────── */
+.roster{margin:0 0 40px}
+.roster-label{
+  font-size:11.5px; letter-spacing:.02em; color:var(--dim); margin:0 0 11px;
+}
+.chips{display:flex; flex-wrap:wrap; gap:6px; list-style:none; padding:0; margin:0}
+.chips li{margin:0; padding:6px 9px}
+.chips li::before{content:none}
+.chip{
+  font-family:var(--mono); font-size:11.5px; line-height:1; padding:6px 9px;
+  border:1px solid transparent; border-radius:3px; color:var(--dim);
+  animation:rise .5s both; animation-delay:calc(var(--i) * 35ms);
+}
+.chip.on{color:var(--signal); border-color:rgba(255,180,92,.42); background:var(--signal-soft)}
+@keyframes rise{from{opacity:0; transform:translateY(5px)} to{opacity:1; transform:none}}
+@media (prefers-reduced-motion:reduce){.chip{animation:none}}
+
+/* ── 헤드라인 ─────────────────────────────────────── */
+.leads{margin:0 0 44px; padding:0; list-style:none; counter-reset:lead}
+.leads li{
+  display:grid; grid-template-columns:30px 1fr; gap:4px; align-items:baseline;
+  padding:15px 0; border-top:1px solid var(--line); margin:0;
+}
+.leads li::marker{content:none}
+.leads-body{display:block; line-height:1.7}
+.leads li::before{
+  counter-increment:lead; content:counter(lead);
+  font-family:var(--slab); font-size:19px; color:var(--signal); line-height:1.5;
+}
+.leads strong{font-weight:700}
+
+/* ── 본문 ─────────────────────────────────────────── */
+h2{
+  font-size:12.5px; letter-spacing:.06em; font-weight:700; color:var(--signal);
+  margin:54px 0 20px; padding-bottom:9px; border-bottom:1px solid var(--line);
+}
+h3{
+  font-family:var(--mono); font-size:14px; font-weight:600; color:var(--paper);
+  margin:32px 0 10px; padding-left:11px; border-left:2px solid var(--signal);
+}
+/* 경고 섹션만 붉은 계열 — 나머지와 시급성이 다르다 */
+h2.warn{color:#ff8a6b; border-bottom-color:rgba(255,138,107,.35)}
+h2.warn + ul li::before{background:#ff8a6b}
+p{margin:0 0 15px}
+ul{padding-left:0; list-style:none; margin:0 0 15px}
+ul li{position:relative; padding-left:17px; margin-bottom:13px}
+ul li::before{
+  content:''; position:absolute; left:0; top:.72em; width:5px; height:1px;
+  background:var(--signal); opacity:.75;
+}
+/* 프로젝트 이름으로 시작하는 항목은 그 이름이 그 줄의 주인이다 */
+ul li > strong:first-child{
+  display:inline-block; font-family:var(--mono); font-size:12.5px; font-weight:600;
+  color:var(--signal); letter-spacing:-.1px;
+}
+strong{color:#fff; font-weight:700}
+a{color:var(--paper); text-decoration:none; border-bottom:1px solid rgba(255,180,92,.45)}
+a:hover{color:var(--signal); border-bottom-color:var(--signal)}
+a:focus-visible{outline:2px solid var(--signal); outline-offset:3px; border-radius:2px}
+a.src{
+  font-family:var(--mono); font-size:11px; color:var(--dim); border-bottom:0;
+  white-space:nowrap; padding-left:2px;
+}
+a.src:hover{color:var(--signal)}
+code{
+  font-family:var(--mono); font-size:.86em; background:var(--surface);
+  padding:1.5px 5px; border-radius:3px; color:#cfd7ea;
+}
+hr{border:0; border-top:1px solid var(--line); margin:34px 0}
+.foot{
+  margin-top:64px; padding-top:20px; border-top:1px solid var(--line);
+  font-family:var(--mono); font-size:11px; color:var(--dim); letter-spacing:.04em;
+}
+@media (max-width:560px){
+  body{font-size:16px}
+  .wrap{padding:36px 18px 72px}
+  h1{font-size:24px}
+}
+"""
 
 if __name__ == "__main__":
     path = sys.argv[1]
