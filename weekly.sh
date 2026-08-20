@@ -21,7 +21,7 @@ if [ -z "$WEEK_REPORTS" ]; then
 fi
 
 MODEL="${WEEKLY_MODEL:-fable}" ./gen_report.sh "out/report-weekly-$DATE.md" <<EOF
-$(cat prompt-weekly.md)
+$(cat prompts/weekly.md)
 
 ## 발행일
 이 리포트의 발행일은 **$DATE**(한국 시간)다.
