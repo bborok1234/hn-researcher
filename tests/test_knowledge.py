@@ -20,6 +20,11 @@ def write_day(out, date, cands, urls, report):
         f.write(report)
 
 
+def read_file(path):
+    with open(path) as f:
+        return f.read()
+
+
 def ingest(out, date):
     r = subprocess.run([sys.executable, os.path.join(ROOT, "knowledge.py"),
                         "--ingest", date, "--dir", out],
@@ -97,9 +102,11 @@ class TestIngest(unittest.TestCase):
         ingest(self.out, "2026-08-18")
         self.assertIn("묵힌 것", pending(self.out, "--days", "3650"))
 
+        # 되살아난 항목의 URL은 **오늘 urls 맵에 없다** — 어제 잡힌 것이다.
+        # 처음 쓴 테스트는 여기에 {"7": ...}를 넣어 버그를 가렸다(Codex가 잡아냈다).
         write_day(self.out, "2026-08-20",
                   [{"id": "7", "title": "묵힌 것", "project": "p", "why": "오늘은 맞다"}],
-                  {"7": "https://c.dev/z"}, "본문 [묵힌 것](https://c.dev/z) 끝")
+                  {}, "본문 [묵힌 것](https://c.dev/z) 끝")
         stdout = ingest(self.out, "2026-08-20")
 
         text = self.page("p")
@@ -109,6 +116,53 @@ class TestIngest(unittest.TestCase):
         self.assertIn("되살아남 1", stdout)
         self.assertIn("**되살아남 1건**", open(
             os.path.join(self.out, "knowledge", "log.md")).read())
+
+    def test_revived_under_different_project(self):
+        """버그: 재심 때 LLM이 project를 다르게 적으면 원래 페이지의 보류 항목이 영구히
+        남아, 이미 리포트에 쓴 항목이 매일 다시 재심 대상으로 올라왔다. 정리는 전역이어야 한다."""
+        write_day(self.out, "2026-08-18",
+                  [{"id": "7", "title": "묵힌 것", "project": "이전주제", "why": "그때"}],
+                  {"7": "https://j.dev/z"}, "")
+        ingest(self.out, "2026-08-18")
+        write_day(self.out, "2026-08-20",
+                  [{"id": "7", "title": "묵힌 것", "project": "새주제", "why": "오늘"}],
+                  {}, "본문 [묵힌 것](https://j.dev/z) 끝")
+        ingest(self.out, "2026-08-20")
+        self.assertEqual(k.parse_items(self.page("이전주제"), k.PENDING), [])
+        self.assertNotIn("묵힌 것", pending(self.out, "--days", "3650"))
+
+    def test_reserved_page_name_does_not_clobber_index(self):
+        """`project`는 LLM이 채운다. 'index'를 그대로 쓰면 생성된 index.md가
+        항목 페이지를 덮어써 그 주제가 통째로 사라진다(OKF §3.1 예약 이름)."""
+        write_day(self.out, "2026-08-20",
+                  [{"id": "1", "title": "t", "project": "index", "why": "w"}],
+                  {"1": "https://k.dev/1"}, "")
+        ingest(self.out, "2026-08-20")
+        topics = os.path.join(self.out, "knowledge", "topics")
+        self.assertEqual(k.parse_items(read_file(os.path.join(topics, "index-주제.md")),
+                                       k.PENDING)[0]["title"], "t")
+        self.assertNotIn("`#1`", read_file(os.path.join(topics, "index.md")))
+
+    def test_newline_in_fields_survives_roundtrip(self):
+        """줄바꿈이 하나라도 남으면 그 항목은 다음 읽기에서 조용히 사라진다."""
+        write_day(self.out, "2026-08-20",
+                  [{"id": "1", "title": "제목\n둘째줄", "project": "p", "why": "이유\n둘째줄"}],
+                  {"1": "https://l.dev/1"}, "")
+        ingest(self.out, "2026-08-20")
+        got = k.parse_items(self.page("p"), k.PENDING)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["title"], "제목 둘째줄")
+
+    def test_broken_json_does_not_crash(self):
+        """망가진 JSON 하나가 아침 리포트를 날리면 안 된다."""
+        os.makedirs(self.out, exist_ok=True)
+        with open(os.path.join(self.out, "candidates-2026-08-20.json"), "w") as f:
+            f.write("{ 깨진 ")
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "knowledge.py"),
+                            "--ingest", "2026-08-20", "--dir", self.out],
+                           capture_output=True, text=True, cwd=ROOT)
+        self.assertNotEqual(r.returncode, 0)          # 실패는 알린다
+        self.assertNotIn("Traceback", r.stderr)       # 하지만 터지지는 않는다
 
     def test_pending_window_bounds_prompt_not_bundle(self):
         """창을 제한하는 것은 프롬프트 크기 때문이다. 번들에서는 아무것도 지우지 않는다."""

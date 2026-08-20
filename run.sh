@@ -75,4 +75,7 @@ echo "3/3 리포트 완료: out/report-$DATE.md"
 
 # 오늘 후보 전부를 주제별로 철한다. 채택/보류를 가르고, 보류가 나중에 채택되면 되살아남으로 센다.
 # LLM을 쓰지 않는다 — 0토큰. 종합은 위 작문 턴에서 이미 끝났고 여기서는 철하기만 한다.
-python3 knowledge.py --ingest "$DATE"
+#
+# 실패해도 넘어간다. 리포트는 이미 완성됐고, 여기서 죽으면 set -e에 걸려
+# daily.sh가 to_html도 못 부르고 끝난다 — 철하기 하나 때문에 아침 리포트를 잃는 셈이다.
+python3 knowledge.py --ingest "$DATE" || echo "누적 철하기 실패 — 리포트는 정상" >&2
