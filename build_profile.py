@@ -215,8 +215,10 @@ def git_activity(paths):
         ts = _git(p, "log", "-1", "--format=%at")
         if not ts.isdigit():
             continue
+        # user.email이 비어 있으면 커밋 수를 세지 않는다. `--author=`는 빈 정규식이라
+        # 모든 저자에 매칭돼 팀 레포의 남의 커밋이 전부 내 것으로 집계된다.
         me = _git(p, "config", "user.email")
-        n = _git(p, "rev-list", "--count", "--since=2.weeks", f"--author={me}", "HEAD")
+        n = _git(p, "rev-list", "--count", "--since=2.weeks", f"--author={me}", "HEAD") if me else ""
         out[p] = {
             "last": int(ts),
             "commits": int(n) if n.isdigit() else 0,
@@ -260,19 +262,24 @@ def github_events(pages=3):
     페이지는 3까지다 — 100건×3=300건이 상한이고 4페이지는 422로 죽는다.
     """
     me = _gh("user")
-    if not me or not me.get("login"):
+    if not isinstance(me, dict) or not me.get("login"):
         return {}
     repos = defaultdict(lambda: defaultdict(int))
     for page in range(1, pages + 1):
         batch = _gh(f"/users/{me['login']}/events?per_page=100&page={page}")
-        if not batch:
+        if not isinstance(batch, list) or not batch:
             break
         for e in batch:
-            label = GH_EVENTS.get(e.get("type"))
-            repo = ((e.get("repo") or {}).get("name") or "").strip()
+            # 외부 서비스가 주는 구조는 믿지 않는다. 이벤트 하나가 이상해서
+            # 프로필 생성 전체가 죽으면 안 된다 — 그 한 건만 버린다.
+            try:
+                label = GH_EVENTS.get(e["type"])
+                repo = (e["repo"]["name"] or "").strip()
+                ts = datetime.fromisoformat(e["created_at"].replace("Z", "+00:00")).timestamp()
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
             if not label or not repo:
                 continue
-            ts = datetime.fromisoformat(e["created_at"].replace("Z", "+00:00")).timestamp()
             r = repos[repo]
             r[label] += 1
             r["last"] = max(r["last"], ts)
@@ -294,13 +301,15 @@ def vscode_windows():
         f = ((w or {}).get("folder") or "")
         return unquote(f[len("file://"):]) if f.startswith("file://") else ""
 
+    # 파싱까지 try 안에 둔다. 파일이 없거나 JSON이 깨진 경우만이 아니라,
+    # 문법은 맞고 구조가 다른 경우(windowsState가 리스트 등)에도 죽지 않아야 한다.
     try:
         with open(p) as f:
             ws = json.load(f).get("windowsState") or {}
-    except (OSError, json.JSONDecodeError):
+        opened = [f for f in (folder(w) for w in ws.get("openedWindows") or []) if f]
+        return opened, folder(ws.get("lastActiveWindow"))
+    except (OSError, AttributeError, KeyError, TypeError, ValueError):
         return [], ""
-    opened = [f for f in (folder(w) for w in ws.get("openedWindows") or []) if f]
-    return opened, folder(ws.get("lastActiveWindow"))
 
 
 def signals(days=14):

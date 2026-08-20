@@ -45,6 +45,17 @@ class TestGitActivity(unittest.TestCase):
                                     "GIT_AUTHOR_EMAIL": email})
             self.assertEqual(bp.git_activity([d])[d]["commits"], 1)
 
+    def test_empty_user_email_counts_nothing(self):
+        """버그: user.email이 비면 `--author=`가 빈 정규식이 되어 모든 저자에 매칭된다.
+        팀 레포의 남의 커밋이 전부 내 것으로 집계돼 '내 활동만' 선을 넘었다."""
+        with tempfile.TemporaryDirectory() as d:
+            subprocess.run(("git", "-C", d, "init"), check=True, capture_output=True)
+            for email in ("a@b", "other@x", "other@x"):
+                subprocess.run(("git", "-C", d, "-c", f"user.email={email}", "-c", "user.name=A",
+                                "commit", "--allow-empty", "-m", email),
+                               check=True, capture_output=True)
+            self.assertEqual(bp.git_activity([d])[d]["commits"], 0)  # 3이 아니다
+
 
 class TestGithubEvents(unittest.TestCase):
     def setUp(self):
@@ -85,6 +96,15 @@ class TestGithubEvents(unittest.TestCase):
         bp.github_events()
         self.assertEqual(len([c for c in calls if "events" in c]), 1)
 
+    def test_malformed_event_dropped_not_fatal(self):
+        """외부 서비스 구조는 믿지 않는다. 이벤트 한 건이 이상해서 프로필 생성
+        전체가 죽으면 안 된다 — 그 한 건만 버리고 나머지는 살린다."""
+        self._fake([[None, "문자열", {"type": "PushEvent"},
+                     {"type": "PushEvent", "repo": {"name": "o/r"}, "created_at": "깨진값"},
+                     self._ev("PushEvent", "o/r")]])
+        out = bp.github_events()
+        self.assertEqual(out["o/r"]["푸시"], 1)
+
     def test_no_gh_returns_empty(self):
         """gh가 없거나 미인증이어도 다이제스트는 나와야 한다."""
         bp._gh = lambda path: None
@@ -114,6 +134,13 @@ class TestVscodeWindows(unittest.TestCase):
         self.assertEqual(opened, ["/Users/me/other"])     # folder 없는 창은 버린다
 
     def test_missing_file_is_not_fatal(self):
+        self.assertEqual(bp.vscode_windows(), ([], ""))
+
+    def test_wrong_shape_is_not_fatal(self):
+        """JSON 문법은 맞고 구조만 다른 경우 — 파일 존재·JSON 유효성만 막으면 여기서 터진다."""
+        os.makedirs(self.dir)
+        with open(os.path.join(self.dir, "storage.json"), "w") as f:
+            json.dump({"windowsState": {"openedWindows": {"a": 1}, "lastActiveWindow": 7}}, f)
         self.assertEqual(bp.vscode_windows(), ([], ""))
 
 
