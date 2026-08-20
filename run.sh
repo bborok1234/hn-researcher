@@ -12,14 +12,15 @@ cd "$(dirname "$0")"
 [ -f config.sh ] && source ./config.sh
 export MODEL="${DAILY_MODEL:-sonnet}"
 DATE=${1:-$(date +%F)}
+mkdir -p out   # 산출물은 전부 out/ 아래. 사이드카 파일명 규약은 그대로다
 
-python3 fetch_hn.py $1 --urls "urls-$DATE.json" > "digest-$DATE.md"
-echo "1/3 수집 완료: digest-$DATE.md ($(grep -c '^- ' digest-$DATE.md)건)"
+python3 fetch_hn.py $1 --urls "out/urls-$DATE.json" > "out/digest-$DATE.md"
+echo "1/3 수집 완료: out/digest-$DATE.md ($(grep -c '^- ' out/digest-$DATE.md)건)"
 
 PROJECTS=$(python3 build_profile.py --list)
-print -r -- "$PROJECTS" > "projects-$DATE.txt"   # 화면의 로스터 칩이 이 목록과 대조한다
+print -r -- "$PROJECTS" > "out/projects-$DATE.txt"   # 화면의 로스터 칩이 이 목록과 대조한다
 
-MIN_BYTES=200 ./gen_report.sh "candidates-$DATE.json" <<EOF
+MIN_BYTES=200 ./gen_report.sh "out/candidates-$DATE.json" <<EOF
 $(cat prompt-select.md)
 
 ## 활동 중인 프로젝트 목록 (최근 14일 — 전부 검토 대상)
@@ -29,11 +30,11 @@ $PROJECTS
 $(cat PROFILE.md)
 
 ## 오늘의 HN 게시물 전체 목록
-$(cat digest-$DATE.md)
+$(cat out/digest-$DATE.md)
 EOF
 
 # 모델이 코드펜스를 두르는 경우가 있어 JSON 배열만 잘라낸다
-python3 - "candidates-$DATE.json" <<'PY'
+python3 - "out/candidates-$DATE.json" <<'PY'
 import json, re, sys
 p = sys.argv[1]
 raw = open(p).read()
@@ -41,12 +42,12 @@ m = re.search(r"\[.*\]", raw, re.S)
 assert m, f"후보 JSON을 찾지 못함: {raw[:200]}"
 json.dump(json.loads(m.group()), open(p, "w"), ensure_ascii=False)
 PY
-echo "2/3 선별 완료: $(python3 -c "import json;print(len(json.load(open('candidates-$DATE.json'))))")건"
+echo "2/3 선별 완료: $(python3 -c "import json;print(len(json.load(open('out/candidates-$DATE.json'))))")건"
 
-python3 fetch_pages.py "candidates-$DATE.json" "urls-$DATE.json" > "pages-$DATE.md"
-echo "   본문 수집 완료: $(wc -c < pages-$DATE.md) bytes"
+python3 fetch_pages.py "out/candidates-$DATE.json" "out/urls-$DATE.json" > "out/pages-$DATE.md"
+echo "   본문 수집 완료: $(wc -c < out/pages-$DATE.md) bytes"
 
-./gen_report.sh "report-$DATE.md" <<EOF
+./gen_report.sh "out/report-$DATE.md" <<EOF
 $(cat prompt-write.md)
 
 ## 발행일
@@ -59,7 +60,7 @@ $PROJECTS
 $(cat PROFILE.md)
 
 ## 오늘 수집한 게시물 본문
-$(cat pages-$DATE.md)
+$(cat out/pages-$DATE.md)
 EOF
 
-echo "3/3 리포트 완료: report-$DATE.md"
+echo "3/3 리포트 완료: out/report-$DATE.md"

@@ -74,7 +74,7 @@ cat <<DONE
   설치 완료.
 
   매일 $(printf '%02d:%02d' $PUBLISH_HOUR $PUBLISH_MIN)에 리포트가 만들어지고 브라우저로 열립니다.
-  오늘 리포트: $DIR/report-$(date +%F).html
+  오늘 리포트: $DIR/out/report-$(date +%F).html
 
   자주 쓰는 명령
     ./daily.sh        지금 바로 발행 (오늘 치가 있으면 건너뜀)

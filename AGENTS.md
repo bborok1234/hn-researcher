@@ -1,6 +1,7 @@
 # hn-researcher — 에이전트 지침
 
 설계와 함정 목록은 `ARCHITECTURE.md`, 범위와 계획은 `ROADMAP.md`. 여기 옮겨 적지 말 것.
+`ROADMAP.md`의 `다음` 항목을 끝냈으면 지우지 말고 `한 것`으로 내릴 것 — 왜 그 선에서 멈췄는지는 커밋 로그에 안 남는다.
 
 ## 실행
 
@@ -25,7 +26,7 @@ python3 -m unittest discover -s tests
 
 ## 커밋 금지
 
-`PROFILE.md`, `config.sh`, `report-*`, `digest-*`, `pages-*`, `projects-*`, `logs/` — 진행 중인 사업과 고객사 정보가 들어간다. `.gitignore`에 있으니 그 파일을 수정하지 말 것.
+`PROFILE.md`, `config.sh`, `out/`, `logs/` — 진행 중인 사업과 고객사 정보가 들어간다. `.gitignore`에 있으니 그 파일을 수정하지 말 것.
 공개 저장소이므로 커밋 전에 고객사·사내 용어를 훑을 것.
 
 ## 리뷰

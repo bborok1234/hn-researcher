@@ -41,12 +41,12 @@ cron은 GUI 세션 밖에서 돌아 로그인 키체인에 접근하지 못하�
 - **회사 트랙을 쓰는 경우** `config.sh`의 `COMPANY_NAME`, `COMPANY_DOMAIN`, `COMPANY_KEYWORDS`가
   사용자의 실제 업무 영역과 맞는지 확인한다. 기본값은 헬스케어 기준이다.
 
-마지막으로 오늘 리포트(`report-<오늘날짜>.html`)를 열어 함께 훑고, 빗나간 항목이 있으면
+마지막으로 오늘 리포트(`out/report-<오늘날짜>.html`)를 열어 함께 훑고, 빗나간 항목이 있으면
 그 원인이 프로필인지 키워드인지 짚어준다.
 
 ## 하지 말 것
 
-- `PROFILE.md`, `COMPANY.md`, `report-*`, `digest-*`, `logs/`를 커밋하지 마라.
+- `PROFILE.md`, `COMPANY.md`, `out/`, `logs/`를 커밋하지 마라.
   진행 중인 사업과 고객사 정보가 들어 있다. `.gitignore`에 이미 등록돼 있으니 그 파일을 수정하지 마라.
 - `config.sh`의 `DAILY_MODEL`을 비우지 마라. 비우면 대화창 기본 모델을 물려받아 사용량이 몇 배가 된다.
 - 리포트 생성 단계에 WebFetch 같은 도구를 다시 붙이지 마라. 도구를 쓰면 매 턴 컨텍스트가

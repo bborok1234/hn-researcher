@@ -3,7 +3,7 @@
 set -e
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 cd "$(dirname "$0")"
-mkdir -p logs
+mkdir -p logs out
 [ -f config.sh ] && source ./config.sh
 ENABLE_WEEKLY="${ENABLE_WEEKLY:-1}"; OPEN_BROWSER="${OPEN_BROWSER:-1}"
 
@@ -24,7 +24,7 @@ fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 # 오늘 치가 이미 있으면 종료
-[ -f "report-$DATE.html" ] && exit 0
+[ -f "out/report-$DATE.html" ] && exit 0
 
 # 프로필·회사맥락 갱신
 #  - 월요일: 정기 갱신 (활발→방치 같은 '상태 변화'는 새 프로젝트 감지로는 안 잡힌다)
@@ -36,12 +36,12 @@ if [ "$(date +%u)" = "1" ] || [ -n "$NEW" ]; then
 fi
 
 ./run.sh >> "logs/$DATE.log" 2>&1   # 인자 없음 = 실행 시점 기준 지난 24시간
-python3 to_html.py "report-$DATE.md" > "report-$DATE.html"
+python3 to_html.py "out/report-$DATE.md" > "out/report-$DATE.html"
 
 # 알림/열기 실패가 리포트 생성을 무효로 만들지는 않는다
-HEADLINE=$(grep -m1 '^\*\*' "report-$DATE.md" | tr -d '*' | cut -c1-80 || true)
+HEADLINE=$(grep -m1 '^\*\*' "out/report-$DATE.md" | tr -d '*' | cut -c1-80 || true)
 osascript -e "display notification \"${HEADLINE:-리포트 도착}\" with title \"HN 스카우트 $DATE\" sound name \"Glass\"" || true
-[ "$OPEN_BROWSER" = "1" ] && { open "report-$DATE.html" || true; }
+[ "$OPEN_BROWSER" = "1" ] && { open "out/report-$DATE.html" || true; }
 
 # 월요일: 주간 수익 기회 리포트 (일간이 완성된 뒤 실행 — 중복 제안 방지에 참고한다)
 # if로 쓴다 — `[ ... ] && cmd`를 마지막 줄에 두면 월요일이 아닌 날 스크립트가 실패(1)로 끝난다
