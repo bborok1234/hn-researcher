@@ -92,6 +92,36 @@ class TestRoster(unittest.TestCase):
             self.assertEqual(idle, ["beta-proj"])
 
 
+class TestCopyButton(unittest.TestCase):
+    """아침에 읽고 바로 에이전트에 붙이는 것이 이 리포트의 주 용도다.
+    화면은 URL을 도메인으로 줄여 보여주므로 본문을 긁으면 링크가 빠진다."""
+
+    def test_copies_markdown_source_not_rendered_text(self):
+        html_out = to_html.convert("**적용**\n- 항목 [원문](https://x.dev/a) 읽기 2분\n")
+        # 불릿(`- `)은 토크나이저가 이미 떼므로 복사되는 것은 본문뿐이다 — 붙일 때 더 깔끔하다
+        self.assertIn('data-md="항목 [원문](https://x.dev/a) 읽기 2분"', html_out)
+        self.assertIn('<a href="https://x.dev/a">원문</a>', html_out)
+
+    def test_bare_url_shortened_on_screen_but_full_in_copy(self):
+        """맨 URL은 화면에서 `도메인 ↗`로 줄어든다 — 이게 복붙으로 링크가 빠지던 원인이다."""
+        html_out = to_html.convert("**적용**\n- 항목 https://x.dev/very/long/path\n")
+        self.assertIn("x.dev ↗", html_out)                       # 화면
+        self.assertIn("data-md=\"항목 https://x.dev/very/long/path\"", html_out)  # 복사
+
+    def test_quotes_in_line_do_not_break_attribute(self):
+        """버그 종류: 인용부호가 data-md 속성을 닫아 버리면 복사 내용이 잘리고
+        HTML도 깨지는데, 화면상으로는 멀쩡해 보여서 알아채기 어렵다."""
+        html_out = to_html.convert('**적용**\n- 그가 "이건 아니다"라고 했다 https://x.dev/b\n')
+        self.assertIn("&quot;이건 아니다&quot;", html_out)
+        self.assertEqual(html_out.count('data-md="'), 1)
+        # 속성이 조기 종료되지 않았는지 — 버튼 태그가 온전히 닫혔는지로 확인
+        self.assertRegex(html_out, r'data-md="[^"]*">복사</button>')
+
+    def test_button_on_every_item(self):
+        html_out = to_html.convert("**적용**\n- 하나\n- 둘\n- 셋\n")
+        self.assertEqual(html_out.count('class="cp"'), 3)
+
+
 class TestConvert(unittest.TestCase):
     def test_warn_section_marked(self):
         """경고는 시급성이 달라 시각적으로 분리해야 한다."""
