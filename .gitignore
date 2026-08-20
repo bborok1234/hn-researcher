@@ -1,0 +1,19 @@
+# 개인·사내 데이터 — 절대 커밋 금지.
+# PROFILE.md와 COMPANY.md는 사용 기록에서 생성되며 진행 중인 사업·고객사·내부 판단이 담긴다.
+PROFILE.md
+COMPANY.md
+config.sh
+
+# 실행 산출물
+digest-*.md
+candidates-*.json
+urls-*.json
+pages-*.md
+report-*.md
+report-*.html
+logs/
+
+# 기타
+.DS_Store
+__pycache__/
+digest-profile.md
