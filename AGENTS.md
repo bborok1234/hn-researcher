@@ -9,6 +9,9 @@
 ./daily.sh                    # 아침 발행 전체 (launchd가 부르는 것)
 ./run.sh [YYYY-MM-DD]         # 리포트만 (인자 없으면 지난 24시간)
 python3 -m unittest discover -s tests
+
+python3 knowledge.py --pending      # 재심 대상(안 쓰인 후보) 확인
+python3 knowledge.py --ingest DATE  # 후보를 누적 번들에 반영 (run.sh가 자동으로 부른다)
 ```
 
 ## 기본과 다른 제약
@@ -23,6 +26,10 @@ python3 -m unittest discover -s tests
 
 선별 기준·리포트 구조·통과 조건은 전부 `prompt-*.md`에 있고 파이썬은 배관이다.
 품질 문제는 코드보다 프롬프트를 먼저 고칠 것.
+
+## 누적 번들에 화면을 붙이지 말 것
+
+`out/knowledge/`는 기계 쪽에만 있다. 보류 항목을 리포트나 HTML에 목록으로 노출하면 미독 백로그가 되고, 그건 `ROADMAP.md`가 이탈 1번 원인으로 적어 금지한 것이다. 보류는 오늘 한 장 안에서 오늘 것과 동등하게 경쟁해서만 다시 나온다.
 
 ## 커밋 금지
 
