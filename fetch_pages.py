@@ -115,9 +115,11 @@ if __name__ == "__main__":
     for c, body in ok:
         hn = f"https://news.ycombinator.com/item?id={c['id']}" if c.get("id") else ""
         kind = "HN 댓글" if c.get("source") == "comments" else "원문"
+        # 한글 약 500자/분, 영문 약 1,200자/분으로 잡아 섞인 글을 대충 700자/분으로 근사
+        mins = max(1, round(len(body) / 700))
         print(f"## {c['title']}")
         print(f"- 관련 프로젝트: {c.get('project', '?')} / 선별 이유: {c.get('why', '')}")
-        print(f"- {kind} | URL: {c.get('url', '')} | HN: {hn}\n")
+        print(f"- {kind} | 읽기 {mins}분 | URL: {c.get('url', '')} | HN: {hn}\n")
         print(body)
         print("\n---\n")
 

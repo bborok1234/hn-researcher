@@ -17,6 +17,7 @@ python3 fetch_hn.py $1 --urls "urls-$DATE.json" > "digest-$DATE.md"
 echo "1/3 수집 완료: digest-$DATE.md ($(grep -c '^- ' digest-$DATE.md)건)"
 
 PROJECTS=$(python3 build_profile.py --list)
+print -r -- "$PROJECTS" > "projects-$DATE.txt"   # 화면의 로스터 칩이 이 목록과 대조한다
 
 MIN_BYTES=200 ./gen_report.sh "candidates-$DATE.json" <<EOF
 $(cat prompt-select.md)

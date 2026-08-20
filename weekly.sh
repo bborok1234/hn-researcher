@@ -1,41 +1,43 @@
 #!/bin/zsh
-# 회사 사업화 심층 리포트 (주 1회). daily.sh가 월요일에 호출한다.
+# 주 1회 수익 기회 리포트. daily.sh가 월요일에 일간 리포트를 낸 뒤 호출한다.
+#
+# 새로 긁지 않는다 — 지난 한 주에 이미 수집해 둔 자료만 다시 훑는다.
+# 하루 단위로는 안 보이고 한 주를 모아야 보이는 것을 찾는 게 이 리포트의 존재 이유다.
 set -e
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 cd "$(dirname "$0")"
 mkdir -p logs
 [ -f config.sh ] && source ./config.sh
-WEEKLY_MODEL="${WEEKLY_MODEL:-fable}"
 
 DATE=$(date +%F)
-[ -f "report-company-$DATE.html" ] && exit 0
+[ -f "report-weekly-$DATE.html" ] && exit 0
 
-[ -f COMPANY.md ] || ./company.sh
+WEEK_REPORTS=$(cat $(ls -t report-2*.md 2>/dev/null | grep -v weekly | head -7) 2>/dev/null || true)
+WEEK_PAGES=$(cat $(ls -t pages-2*.md 2>/dev/null | head -7) 2>/dev/null || true)
 
-# 주간 digest에서 도메인 관련 줄만 추린다.
-# ponytail: 1주치 전량(1MB+)을 넣으면 컨텍스트 낭비 — 키워드 1차 필터 후 LLM이 판단.
-KEYWORDS="${COMPANY_KEYWORDS:?config.sh에 COMPANY_KEYWORDS가 필요합니다}"
+if [ -z "$WEEK_REPORTS" ]; then
+  echo "지난 주 일간 리포트가 없어 건너뜀"
+  exit 0
+fi
 
-FILTERED=$(cat $(ls -t digest-2*.md | head -7) 2>/dev/null | grep -iE "$KEYWORDS" | sort -u || true)
-RECENT_REPORTS=$(cat $(ls -t report-2*.md 2>/dev/null | head -7) 2>/dev/null || true)
+MODEL="${WEEKLY_MODEL:-fable}" ./gen_report.sh "report-weekly-$DATE.md" <<EOF
+$(cat prompt-weekly.md)
 
-echo "도메인 관련 게시물 $(echo "$FILTERED" | grep -c '^-' || echo 0)건 추출"
+## 발행일
+이 리포트의 발행일은 **$DATE**(한국 시간)다.
 
-# 주 1회 심층 분석이라 상위 모델 유지 (규제·사업성 판단이 들어간다). 일일은 sonnet.
-MODEL="$WEEKLY_MODEL" DISALLOW="Bash,Read,Write,Edit,Glob,Grep,Task,TodoWrite,NotebookEdit" ./gen_report.sh "report-company-$DATE.md" <<EOF
-$(sed -e "s|{{COMPANY_NAME}}|$COMPANY_NAME|g" -e "s|{{COMPANY_DOMAIN}}|$COMPANY_DOMAIN|g" prompt-company.md)
+## 내 프로필
+$(cat PROFILE.md)
 
-## 회사 맥락
-$(cat COMPANY.md)
+## 지난 한 주 일간 리포트
+$WEEK_REPORTS
 
-## 최근 1주 HN 헬스케어·의료 관련 게시물
-$FILTERED
-
-## 같은 기간 개인용 리포트 (중복 제안 방지 및 맥락 참고)
-$RECENT_REPORTS
+## 같은 기간 수집된 게시물 본문
+$WEEK_PAGES
 EOF
 
-python3 to_html.py "report-company-$DATE.md" > "report-company-$DATE.html"
-osascript -e "display notification \"$COMPANY_NAME 사업화 리포트 도착\" with title \"주간 심층 리포트 $DATE\" sound name \"Glass\"" || true
-open "report-company-$DATE.html" || true
-echo "회사 리포트 완료: report-company-$DATE.md"
+python3 to_html.py "report-weekly-$DATE.md" > "report-weekly-$DATE.html"
+osascript -e "display notification \"주간 수익 기회 리포트\" with title \"hn-researcher $DATE\" sound name \"Glass\"" || true
+[ "${OPEN_BROWSER:-1}" = "1" ] && { open "report-weekly-$DATE.html" || true; }
+echo "주간 리포트 완료: report-weekly-$DATE.md"
+exit 0

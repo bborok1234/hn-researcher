@@ -38,10 +38,6 @@ else
   say "사용 기록에서 프로필 생성 중 (1~2분)"
   ./profile.sh
 fi
-if [ "$ENABLE_COMPANY" = "1" ] && [ ! -f COMPANY.md ]; then
-  say "회사 맥락 생성 중"
-  ./company.sh
-fi
 
 # ── 4. 스케줄 등록 ────────────────────────────────────────────
 say "매일 $(printf '%02d:%02d' $PUBLISH_HOUR $PUBLISH_MIN) 발행으로 launchd 등록"

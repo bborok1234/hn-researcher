@@ -87,6 +87,9 @@ h3{
   font-family:var(--mono); font-size:14px; font-weight:600; color:var(--paper);
   margin:32px 0 10px; padding-left:11px; border-left:2px solid var(--signal);
 }
+/* 경고 섹션만 붉은 계열 — 나머지와 시급성이 다르다 */
+h2.warn{color:#ff8a6b; border-bottom-color:rgba(255,138,107,.35)}
+h2.warn + ul li::before{background:#ff8a6b}
 p{margin:0 0 15px}
 ul{padding-left:0; list-style:none; margin:0 0 15px}
 ul li{position:relative; padding-left:17px; margin-bottom:13px}
@@ -187,18 +190,28 @@ def inline(s):
     return s
 
 
-def roster(md):
-    """(활동한 프로젝트, 오늘 빈 프로젝트). 리포트 본문에서만 뽑는다."""
-    active, idle, in_apply = [], [], False
-    for kind, text in tokenize(md):
-        if kind == "h2":
-            in_apply = "적용할 것" in text
-            continue
-        m = re.search(r"오늘 매칭 없음\s*[::]\s*(.+)", text)
-        if m:
-            idle += slugs(m.group(1))
-        elif in_apply and kind == "h3":
-            active += slugs(text)
+def roster(md, report_path):
+    """(활동한 프로젝트, 오늘 빈 프로젝트).
+
+    섹션이 프로젝트별이 아니라 '결정 종류'별로 나뉘므로, 프로젝트 이름은 항목 본문 안에
+    묻혀 있다. 그래서 run.sh가 남긴 projects-<날짜>.txt(추적 중인 전체 목록)와 대조한다.
+    목록 파일이 없으면 '매칭 없음' 줄만으로 최소 동작."""
+    idle = []
+    for m in re.finditer(r"오늘 매칭 없음\s*[::]\s*(.+)", md):
+        idle += slugs(m.group(1))
+
+    d = os.path.dirname(os.path.abspath(report_path))
+    date = re.search(r"(\d{4}-\d{2}-\d{2})", os.path.basename(report_path))
+    known = []
+    if date:
+        try:
+            known = [l.strip().lstrip("- ").strip() for l in open(os.path.join(d, f"projects-{date.group(1)}.txt"))]
+            known = [k for k in known if SLUG.match(k)]
+        except OSError:
+            known = []
+
+    body = md
+    active = [k for k in known if k not in idle and re.search(re.escape(k), body)]
     seen = set()
     active = [p for p in active if not (p in seen or seen.add(p))]
     idle = [p for p in idle if not (p in seen or seen.add(p))]
@@ -249,7 +262,8 @@ def convert(md):
         elif kind == "hr":
             out.append("<hr>")
         elif kind == "h2":
-            out.append(f"<h2>{inline(text)}</h2>")
+            cls = ' class="warn"' if text.strip() in ("경고", "경고!") else ""
+            out.append(f"<h2{cls}>{inline(text)}</h2>")
         elif kind == "h3":
             out.append(f"<h3>{inline(text)}</h3>")
         else:
@@ -284,7 +298,7 @@ if __name__ == "__main__":
             bits.append(f"<b>{f['picked']}</b>건 추려")
         if f.get("read"):
             bits.append(f"<b>{f['read']}</b>건 원문 확인")
-    active, idle = roster(md)
+    active, idle = roster(md, path)
     if active:
         bits.append(f"<b>{len(active)}</b>개 프로젝트에 배달")
 
